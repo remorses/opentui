@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "renderables-vs-constructs",
+    "---OpenTUI Packages---",
+    "packages/core/README",
+    "packages/go/README",
+    "packages/react/README",
+    "packages/solid/README",
+    "packages/vue/README",
+    "---Agent Guidelines---",
+    "AGENTS",
+    "README"
+  ]
+}
