@@ -1,9 +1,0 @@
-{
-  "pages": [
-    "getting-started",
-    "renderables-vs-constructs",
-    "---Core Examples---",
-    "packages/core/src/renderables/composition/README",
-    "..."
-  ]
-}
