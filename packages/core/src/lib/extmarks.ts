@@ -7,6 +7,7 @@ export interface Extmark {
   start: number // Display-width offset (including newlines), NOT JS string index
   end: number // Display-width offset (including newlines), NOT JS string index
   virtual: boolean
+  disableWordJumping: boolean
   styleId?: number
   priority?: number
   data?: any
@@ -17,6 +18,8 @@ export interface ExtmarkOptions {
   start: number // Display-width offset (including newlines), NOT JS string index
   end: number // Display-width offset (including newlines), NOT JS string index
   virtual?: boolean
+  /** When true, word jumping will skip over this virtual extmark. Default: false */
+  disableWordJumping?: boolean
   styleId?: number
   priority?: number
   data?: any
@@ -227,14 +230,20 @@ export class ExtmarksController {
       const movingForward = offset > currentOffset
 
       if (movingForward) {
-        const virtualExtmark = this.findVirtualExtmarkContaining(offset)
+        const virtualExtmark = this.findVirtualExtmarkWithWordJumpDisabled(offset)
         if (virtualExtmark && currentOffset <= virtualExtmark.start) {
           this.originalSetCursorByOffset(virtualExtmark.end)
           return
         }
       } else {
         for (const extmark of this.extmarks.values()) {
-          if (extmark.virtual && currentOffset >= extmark.end && offset < extmark.end && offset >= extmark.start) {
+          if (
+            extmark.virtual &&
+            extmark.disableWordJumping &&
+            currentOffset >= extmark.end &&
+            offset < extmark.end &&
+            offset >= extmark.start
+          ) {
             this.originalSetCursorByOffset(extmark.start - 1)
             return
           }
@@ -503,6 +512,15 @@ export class ExtmarksController {
     return null
   }
 
+  private findVirtualExtmarkWithWordJumpDisabled(offset: number): Extmark | null {
+    for (const extmark of this.extmarks.values()) {
+      if (extmark.virtual && extmark.disableWordJumping && offset >= extmark.start && offset < extmark.end) {
+        return extmark
+      }
+    }
+    return null
+  }
+
   private adjustExtmarksAfterInsertion(insertOffset: number, length: number): void {
     for (const extmark of this.extmarks.values()) {
       if (extmark.start >= insertOffset) {
@@ -635,6 +653,7 @@ export class ExtmarksController {
       start: options.start,
       end: options.end,
       virtual: options.virtual ?? false,
+      disableWordJumping: options.disableWordJumping ?? false,
       styleId: options.styleId,
       priority: options.priority,
       data: options.data,

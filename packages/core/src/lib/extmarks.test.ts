@@ -1032,7 +1032,27 @@ Press ESC to return to main menu.`
   })
 
   describe("Virtual Extmark - Word Boundary Movement", () => {
-    it("should not land inside virtual extmark when moving backward by word from after extmark", async () => {
+    it("should allow normal word jumping inside virtual extmark by default", async () => {
+      await setup("hello [VIRTUAL] world test")
+
+      textarea.focus()
+      textarea.cursorOffset = 0
+
+      extmarks.create({
+        start: 6,
+        end: 16,
+        virtual: true,
+      })
+
+      expect(textarea.cursorOffset).toBe(0)
+
+      // Without disableWordJumping, cursor should land at normal word boundaries
+      textarea.moveWordForward()
+      // Normal word boundary behavior - lands at first word boundary
+      expect(textarea.cursorOffset).toBe(6)
+    })
+
+    it("should not land inside virtual extmark when moving backward by word from after extmark with disableWordJumping", async () => {
       await setup("bla [VIRTUAL] bla")
 
       textarea.focus()
@@ -1042,6 +1062,7 @@ Press ESC to return to main menu.`
         start: 4,
         end: 13,
         virtual: true,
+        disableWordJumping: true,
       })
 
       expect(textarea.cursorOffset).toBe(13)
@@ -1050,7 +1071,7 @@ Press ESC to return to main menu.`
       expect(textarea.cursorOffset).toBe(3)
     })
 
-    it("should jump cursor over virtual extmark when moving forward by word", async () => {
+    it("should jump cursor over virtual extmark when moving forward by word with disableWordJumping", async () => {
       await setup("hello [VIRTUAL] world test")
 
       textarea.focus()
@@ -1060,6 +1081,7 @@ Press ESC to return to main menu.`
         start: 6,
         end: 16,
         virtual: true,
+        disableWordJumping: true,
       })
 
       expect(textarea.cursorOffset).toBe(0)
@@ -1074,7 +1096,7 @@ Press ESC to return to main menu.`
       expect(extmark).not.toBeNull()
     })
 
-    it("should jump cursor over virtual extmark when moving backward by word", async () => {
+    it("should jump cursor over virtual extmark when moving backward by word with disableWordJumping", async () => {
       await setup("hello [VIRTUAL] world test")
 
       textarea.focus()
@@ -1084,6 +1106,7 @@ Press ESC to return to main menu.`
         start: 6,
         end: 16,
         virtual: true,
+        disableWordJumping: true,
       })
 
       expect(textarea.cursorOffset).toBe(22)
@@ -1098,14 +1121,14 @@ Press ESC to return to main menu.`
       expect(extmark).not.toBeNull()
     })
 
-    it("should jump over multiple virtual extmarks when moving forward by word", async () => {
+    it("should jump over multiple virtual extmarks when moving forward by word with disableWordJumping", async () => {
       await setup("one [V1] two [V2] three")
 
       textarea.focus()
       textarea.cursorOffset = 0
 
-      extmarks.create({ start: 4, end: 9, virtual: true })
-      extmarks.create({ start: 13, end: 18, virtual: true })
+      extmarks.create({ start: 4, end: 9, virtual: true, disableWordJumping: true })
+      extmarks.create({ start: 13, end: 18, virtual: true, disableWordJumping: true })
 
       textarea.moveWordForward()
       expect(textarea.cursorOffset).toBe(9)
@@ -1117,14 +1140,14 @@ Press ESC to return to main menu.`
       expect(textarea.cursorOffset).toBe(23)
     })
 
-    it("should jump over multiple virtual extmarks when moving backward by word", async () => {
+    it("should jump over multiple virtual extmarks when moving backward by word with disableWordJumping", async () => {
       await setup("one [V1] two [V2] three")
 
       textarea.focus()
       textarea.cursorOffset = 23
 
-      extmarks.create({ start: 4, end: 9, virtual: true })
-      extmarks.create({ start: 13, end: 18, virtual: true })
+      extmarks.create({ start: 4, end: 9, virtual: true, disableWordJumping: true })
+      extmarks.create({ start: 13, end: 18, virtual: true, disableWordJumping: true })
 
       textarea.moveWordBackward()
       expect(textarea.cursorOffset).toBe(18)
