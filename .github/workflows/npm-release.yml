@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "*snapshot*"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to release from"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
           fetch-depth: 0
 
       - name: Setup Bun
@@ -28,22 +35,16 @@ jobs:
         with:
           version: 0.14.1
 
-      - name: Extract version from tag
-        id: extract_version
-        run: |
-          TAG=${GITHUB_REF#refs/tags/v}
-          echo "version=$TAG" >> $GITHUB_OUTPUT
-          echo "Extracted version: $TAG"
-
       - name: Generate snapshot version
         id: version_scheme
         run: |
-          TAG_VERSION="${{ steps.extract_version.outputs.version }}"
           COMMIT_SHA=$(git rev-parse --short=8 HEAD)
+          BRANCH="${{ github.event.inputs.branch || github.ref_name }}"
 
-          # Pre-release snapshot
+          # Pre-release snapshot: 0.0.0-YYYYMMDD-<commit>
           VERSION="0.0.0-$(date +%Y%m%d)-${COMMIT_SHA}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing snapshot from branch: $BRANCH"
           echo "Using snapshot version: $VERSION"
 
       - name: Install dependencies
