@@ -135,8 +135,8 @@ pub const OptimizedBuffer = struct {
     grapheme_tracker: gp.GraphemeTracker,
     width_method: utf8.WidthMethod,
     id: []const u8,
-    scissor_stack: std.ArrayList(ClipRect),
-    opacity_stack: std.ArrayList(f32),
+    scissor_stack: std.ArrayListUnmanaged(ClipRect),
+    opacity_stack: std.ArrayListUnmanaged(f32),
 
     const InitOptions = struct {
         respectAlpha: bool = false,
@@ -159,11 +159,11 @@ pub const OptimizedBuffer = struct {
         const owned_id = allocator.dupe(u8, options.id) catch return BufferError.OutOfMemory;
         errdefer allocator.free(owned_id);
 
-        var scissor_stack = std.ArrayList(ClipRect).init(allocator);
-        errdefer scissor_stack.deinit();
+        var scissor_stack: std.ArrayListUnmanaged(ClipRect) = .{};
+        errdefer scissor_stack.deinit(allocator);
 
-        var opacity_stack = std.ArrayList(f32).init(allocator);
-        errdefer opacity_stack.deinit();
+        var opacity_stack: std.ArrayListUnmanaged(f32) = .{};
+        errdefer opacity_stack.deinit(allocator);
 
         self.* = .{
             .buffer = .{
@@ -209,8 +209,8 @@ pub const OptimizedBuffer = struct {
     }
 
     pub fn deinit(self: *OptimizedBuffer) void {
-        self.opacity_stack.deinit();
-        self.scissor_stack.deinit();
+        self.opacity_stack.deinit(self.allocator);
+        self.scissor_stack.deinit(self.allocator);
         self.grapheme_tracker.deinit();
         self.allocator.free(self.buffer.char);
         self.allocator.free(self.buffer.fg);
@@ -292,7 +292,7 @@ pub const OptimizedBuffer = struct {
             }
         }
 
-        try self.scissor_stack.append(rect);
+        try self.scissor_stack.append(self.allocator, rect);
     }
 
     pub fn popScissorRect(self: *OptimizedBuffer) void {
@@ -315,7 +315,7 @@ pub const OptimizedBuffer = struct {
     pub fn pushOpacity(self: *OptimizedBuffer, opacity: f32) !void {
         const current = self.getCurrentOpacity();
         const effective = current * std.math.clamp(opacity, 0.0, 1.0);
-        try self.opacity_stack.append(effective);
+        try self.opacity_stack.append(self.allocator, effective);
     }
 
     /// Pop an opacity value from the stack
@@ -750,11 +750,11 @@ pub const OptimizedBuffer = struct {
 
         const is_ascii_only = utf8.isAsciiOnly(text);
 
-        var grapheme_list = std.ArrayList(utf8.GraphemeInfo).init(self.allocator);
-        defer grapheme_list.deinit();
+        var grapheme_list: std.ArrayListUnmanaged(utf8.GraphemeInfo) = .{};
+        defer grapheme_list.deinit(self.allocator);
 
         const tab_width: u8 = 2;
-        try utf8.findGraphemeInfo(text, tab_width, is_ascii_only, self.width_method, &grapheme_list);
+        try utf8.findGraphemeInfo(text, tab_width, is_ascii_only, self.width_method, self.allocator, &grapheme_list);
         const specials = grapheme_list.items;
 
         var advance_cells: u32 = 0;
