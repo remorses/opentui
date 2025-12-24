@@ -47,6 +47,7 @@ export interface DiffRenderableOptions extends RenderableOptions<DiffRenderable>
   removedSignColor?: string | RGBA
   addedLineNumberBg?: string | RGBA
   removedLineNumberBg?: string | RGBA
+  onHighlightComplete?: () => void
 }
 
 export class DiffRenderable extends Renderable {
@@ -106,6 +107,9 @@ export class DiffRenderable extends Renderable {
   private errorTextRenderable: TextRenderable | null = null
   private errorCodeRenderable: CodeRenderable | null = null
 
+  private _onHighlightComplete?: () => void
+  private _pendingHighlights = 0
+
   constructor(ctx: RenderContext, options: DiffRenderableOptions) {
     super(ctx, {
       ...options,
@@ -141,6 +145,7 @@ export class DiffRenderable extends Renderable {
     this._removedSignColor = parseColor(options.removedSignColor ?? "#ef4444")
     this._addedLineNumberBg = parseColor(options.addedLineNumberBg ?? "transparent")
     this._removedLineNumberBg = parseColor(options.removedLineNumberBg ?? "transparent")
+    this._onHighlightComplete = options.onHighlightComplete
 
     // Only parse and build if diff is provided
     if (this._diff) {
@@ -240,6 +245,13 @@ export class DiffRenderable extends Renderable {
     super.destroyRecursively()
   }
 
+  private handleHighlightComplete(): void {
+    this._pendingHighlights--
+    if (this._pendingHighlights === 0 && this._onHighlightComplete) {
+      this._onHighlightComplete()
+    }
+  }
+
   /**
    * Create or update a CodeRenderable with the given content and options.
    * Reuses existing instances to avoid expensive recreation.
@@ -315,6 +327,10 @@ export class DiffRenderable extends Renderable {
   ): CodeRenderable {
     const existingRenderable = side === "left" ? this.leftCodeRenderable : this.rightCodeRenderable
 
+    if (this._filetype) {
+      this._pendingHighlights++
+    }
+
     if (!existingRenderable) {
       // Create new CodeRenderable
       const codeOptions: CodeOptions = {
@@ -326,6 +342,7 @@ export class DiffRenderable extends Renderable {
         syntaxStyle: this._syntaxStyle ?? SyntaxStyle.create(),
         width: "100%",
         height: "100%",
+        onHighlightComplete: () => this.handleHighlightComplete(),
         ...(this._fg !== undefined && { fg: this._fg }),
         ...(drawUnstyledText !== undefined && { drawUnstyledText }),
         ...(this._selectionBg !== undefined && { selectionBg: this._selectionBg }),
@@ -346,6 +363,7 @@ export class DiffRenderable extends Renderable {
       existingRenderable.content = content
       existingRenderable.wrapMode = wrapMode ?? "none"
       existingRenderable.conceal = this._conceal
+      existingRenderable.onHighlightComplete = () => this.handleHighlightComplete()
       if (drawUnstyledText !== undefined) {
         existingRenderable.drawUnstyledText = drawUnstyledText
       }
