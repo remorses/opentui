@@ -15,6 +15,7 @@ export interface CodeOptions extends TextBufferOptions {
   conceal?: boolean
   drawUnstyledText?: boolean
   streaming?: boolean
+  onHighlightComplete?: () => void
 }
 
 export class CodeRenderable extends TextBufferRenderable {
@@ -31,6 +32,7 @@ export class CodeRenderable extends TextBufferRenderable {
   private _streaming: boolean
   private _hadInitialContent: boolean = false
   private _lastHighlights: SimpleHighlight[] = []
+  private _onHighlightComplete?: () => void
 
   protected _contentDefaultOptions = {
     content: "",
@@ -49,6 +51,7 @@ export class CodeRenderable extends TextBufferRenderable {
     this._conceal = options.conceal ?? this._contentDefaultOptions.conceal
     this._drawUnstyledText = options.drawUnstyledText ?? this._contentDefaultOptions.drawUnstyledText
     this._streaming = options.streaming ?? this._contentDefaultOptions.streaming
+    this._onHighlightComplete = options.onHighlightComplete
 
     // Set initial content immediately so lineCount is correct for measure functions
     // This prevents width glitches in parent components like LineNumberRenderable
@@ -146,6 +149,14 @@ export class CodeRenderable extends TextBufferRenderable {
       this._treeSitterClient = value
       this._highlightsDirty = true
     }
+  }
+
+  get onHighlightComplete(): (() => void) | undefined {
+    return this._onHighlightComplete
+  }
+
+  set onHighlightComplete(value: (() => void) | undefined) {
+    this._onHighlightComplete = value
   }
 
   private ensureVisibleTextBeforeHighlight(): void {
@@ -247,6 +258,7 @@ export class CodeRenderable extends TextBufferRenderable {
       this._isHighlighting = false
       this._highlightsDirty = false
       this.requestRender()
+      this._onHighlightComplete?.()
     } catch (error) {
       // Check if this result is stale
       if (snapshotId !== this._highlightSnapshotId) {
@@ -261,6 +273,7 @@ export class CodeRenderable extends TextBufferRenderable {
       this._isHighlighting = false
       this._highlightsDirty = false
       this.requestRender()
+      this._onHighlightComplete?.()
     }
   }
 
