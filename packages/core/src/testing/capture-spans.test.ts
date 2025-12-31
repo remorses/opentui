@@ -250,4 +250,61 @@ describe("captureSpans", () => {
     expect(hasRedSpan).toBe(true)
     expect(hasGreenSpan).toBe(true)
   })
+
+  test("should capture unicode box-drawing characters", async () => {
+    const text = new TextRenderable(renderer, { content: "┌──┐│  │└──┘" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const textContent = data.lines.flatMap((l) => l.spans.map((s) => s.text)).join("")
+
+    expect(textContent).toContain("┌")
+    expect(textContent).toContain("─")
+    expect(textContent).toContain("┐")
+    expect(textContent).toContain("│")
+    expect(textContent).toContain("└")
+    expect(textContent).toContain("┘")
+  })
+
+  test("should capture unicode arrow characters", async () => {
+    const text = new TextRenderable(renderer, { content: "←↑→↓" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const textContent = data.lines.flatMap((l) => l.spans.map((s) => s.text)).join("")
+
+    expect(textContent).toContain("←")
+    expect(textContent).toContain("↑")
+    expect(textContent).toContain("→")
+    expect(textContent).toContain("↓")
+  })
+
+  test("should capture unicode braille characters", async () => {
+    const text = new TextRenderable(renderer, { content: "⠋⠙⠹⠸" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const textContent = data.lines.flatMap((l) => l.spans.map((s) => s.text)).join("")
+
+    expect(textContent).toContain("⠋")
+    expect(textContent).toContain("⠙")
+    expect(textContent).toContain("⠹")
+    expect(textContent).toContain("⠸")
+  })
+
+  test("should capture emoji characters", async () => {
+    const text = new TextRenderable(renderer, { content: "Hello 🎉 World" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const textContent = data.lines.flatMap((l) => l.spans.map((s) => s.text)).join("")
+
+    expect(textContent).toContain("Hello")
+    expect(textContent).toContain("🎉")
+    expect(textContent).toContain("World")
+  })
 })

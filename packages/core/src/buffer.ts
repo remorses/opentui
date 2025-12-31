@@ -180,10 +180,43 @@ export class OptimizedBuffer {
     return outputBuffer.slice(0, bytesWritten)
   }
 
+  /**
+   * Get resolved characters as an array indexed by cell position.
+   * This properly decodes grapheme-encoded characters from the zig buffer.
+   */
+  private getResolvedCharsArray(): string[] {
+    const { char } = this.buffers
+    const totalCells = this._width * this._height
+    const result: string[] = new Array(totalCells).fill(" ")
+
+    // Get all resolved chars with line breaks to help parse
+    const bytes = this.getRealCharBytes(true)
+    const text = new TextDecoder().decode(bytes)
+    const lines = text.split("\n")
+
+    let cellIdx = 0
+    for (let y = 0; y < this._height && y < lines.length; y++) {
+      const line = lines[y]
+      let x = 0
+      for (const char of line) {
+        if (x >= this._width) break
+        const i = y * this._width + x
+        result[i] = char
+        x++
+      }
+      // Fill remaining cells with space (already done by fill)
+    }
+
+    return result
+  }
+
   public getSpanLines(): VTermLine[] {
     this.guard()
     const { char, fg, bg, attributes } = this.buffers
     const lines: VTermLine[] = []
+
+    // Pre-compute all resolved characters using zig's proper grapheme decoding
+    const resolvedChars = this.getResolvedCharsArray()
 
     for (let y = 0; y < this._height; y++) {
       const spans: VTermSpan[] = []
@@ -195,7 +228,17 @@ export class OptimizedBuffer {
         const cellFg = rgbaToHex(fg[i * 4], fg[i * 4 + 1], fg[i * 4 + 2], fg[i * 4 + 3])
         const cellBg = rgbaToHex(bg[i * 4], bg[i * 4 + 1], bg[i * 4 + 2], bg[i * 4 + 3])
         const cellFlags = textAttrsToVTermFlags(attributes[i] & 0xff)
-        const cellChar = cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : " "
+
+        // Handle grapheme encoding:
+        // - 0xC0000000 flag = continuation cell (skip)
+        // - Otherwise use pre-computed resolved char
+        const CONTINUATION_FLAG = 0xc0000000
+        if ((cp & CONTINUATION_FLAG) === CONTINUATION_FLAG) {
+          // Continuation cell - part of a wide char, skip
+          continue
+        }
+
+        const cellChar = resolvedChars[i] || " "
 
         // Check if this cell continues the current span
         if (currentSpan && currentSpan.fg === cellFg && currentSpan.bg === cellBg && currentSpan.flags === cellFlags) {
