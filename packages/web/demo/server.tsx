@@ -1,11 +1,50 @@
 import { opentuiWebSocket } from "../src/index"
 import { createRoot, useKeyboard } from "@opentui/react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
+const SPINNERS = {
+  dots: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+  line: ["-", "\\", "|", "/"],
+  circle: ["◐", "◓", "◑", "◒"],
+  bounce: ["⠁", "⠂", "⠄", "⠂"],
+  box: ["▖", "▘", "▝", "▗"],
+  arrows: ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
+}
 
 // Simple counter app component
 function CounterApp() {
   const [count, setCount] = useState(0)
   const [message, setMessage] = useState("Press +/-/arrows, r to reset")
+  const [spinnerIdx, setSpinnerIdx] = useState(0)
+  const [fps, setFps] = useState(0)
+  const spinner = SPINNERS.line
+
+  // Spinner animation at reasonable speed, FPS counter separate
+  useEffect(() => {
+    let frameCount = 0
+    let lastFpsUpdate = Date.now()
+    
+    // Spinner updates at 100ms (10 fps) - visually reasonable
+    const spinnerInterval = setInterval(() => {
+      setSpinnerIdx((i) => (i + 1) % spinner.length)
+    }, 100)
+    
+    // FPS counter updates every 16ms to measure actual render rate
+    const fpsInterval = setInterval(() => {
+      frameCount++
+      const now = Date.now()
+      if (now - lastFpsUpdate >= 1000) {
+        setFps(frameCount)
+        frameCount = 0
+        lastFpsUpdate = now
+      }
+    }, 16)
+    
+    return () => {
+      clearInterval(spinnerInterval)
+      clearInterval(fpsInterval)
+    }
+  }, [])
 
   useKeyboard((e) => {
     console.log(`[key] name="${e.name}" char="${e.char}"`)
@@ -28,8 +67,9 @@ function CounterApp() {
     <box flexDirection="column" padding={1}>
       <box marginBottom={1}>
         <text bold fg="#4ECDC4">
-          OpenTUI Web Demo
+          OpenTUI Web Demo {spinner[spinnerIdx]}
         </text>
+        <text fg="#666"> {fps} fps</text>
       </box>
 
       <box
