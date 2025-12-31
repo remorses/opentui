@@ -53,7 +53,7 @@ let backgroundSet = false
 
 function getMostCommonBackground(data: VTermData): string {
   const bgCounts = new Map<string, number>()
-  
+
   for (const line of data.lines) {
     for (const span of line.spans) {
       const bg = span.bg || ""
@@ -63,7 +63,7 @@ function getMostCommonBackground(data: VTermData): string {
       bgCounts.set(bg, count + span.text.length)
     }
   }
-  
+
   // Find most common
   let maxBg = ""
   let maxCount = 0
@@ -73,7 +73,7 @@ function getMostCommonBackground(data: VTermData): string {
       maxBg = bg
     }
   }
-  
+
   return maxBg || DEFAULT_BG
 }
 
@@ -167,7 +167,7 @@ function renderFull(data: VTermData) {
 function applyDiff(changes: LineDiff[]) {
   for (const { index, line } of changes) {
     lines[index] = line
-    
+
     // Ensure element exists
     while (lineElements.length <= index) {
       const el = document.createElement("div")
@@ -179,21 +179,30 @@ function applyDiff(changes: LineDiff[]) {
       terminal.appendChild(el)
       lineElements.push(el)
     }
-    
+
     lineElements[index].innerHTML = lineToHtml(line)
   }
 }
 
 // Keyboard input
 terminal.addEventListener("keydown", (e) => {
-  e.preventDefault()
-  console.log("[opentui] keydown:", e.key, "ws.readyState:", ws.readyState)
-  
-  if (ws.readyState !== WebSocket.OPEN) {
-    console.log("[opentui] ws not open, skipping")
+  // Don't intercept browser shortcuts
+  // - F keys (F1-F12) for dev tools etc
+  // - Cmd/Ctrl + key combinations (refresh, copy, paste, etc)
+  // - Alt + key on some systems
+  const isFKey = e.key.startsWith("F") && e.key.length <= 3 && !isNaN(Number(e.key.slice(1)))
+
+  if (isFKey || e.metaKey) {
+    // Let browser handle it
     return
   }
-  
+
+  e.preventDefault()
+
+  if (ws.readyState !== WebSocket.OPEN) {
+    return
+  }
+
   const msg = {
     type: "key",
     key: e.key,
@@ -204,7 +213,6 @@ terminal.addEventListener("keydown", (e) => {
       meta: e.metaKey,
     },
   }
-  console.log("[opentui] sending:", msg)
   ws.send(JSON.stringify(msg))
 })
 
