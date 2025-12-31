@@ -48,6 +48,35 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;")
 }
 
+const DEFAULT_BG = "#1e1e1e"
+let backgroundSet = false
+
+function getMostCommonBackground(data: VTermData): string {
+  const bgCounts = new Map<string, number>()
+  
+  for (const line of data.lines) {
+    for (const span of line.spans) {
+      const bg = span.bg || ""
+      // Skip transparent/empty backgrounds
+      if (!bg || bg === "#00000000" || bg === "transparent") continue
+      const count = bgCounts.get(bg) || 0
+      bgCounts.set(bg, count + span.text.length)
+    }
+  }
+  
+  // Find most common
+  let maxBg = ""
+  let maxCount = 0
+  for (const [bg, count] of bgCounts) {
+    if (count > maxCount) {
+      maxCount = count
+      maxBg = bg
+    }
+  }
+  
+  return maxBg || DEFAULT_BG
+}
+
 function spanToHtml(span: VTermSpan): string {
   const styles: string[] = []
 
@@ -112,6 +141,13 @@ ws.onmessage = (event) => {
 }
 
 function renderFull(data: VTermData) {
+  // Set page background from first frame
+  if (!backgroundSet) {
+    const bg = getMostCommonBackground(data)
+    document.body.style.backgroundColor = bg
+    backgroundSet = true
+  }
+
   lines = data.lines
   terminal.innerHTML = ""
   lineElements = []
