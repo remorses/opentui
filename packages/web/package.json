@@ -1,0 +1,35 @@
+{
+  "name": "@opentui/web",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "demo:server": "bun run demo/server.tsx",
+    "demo:client": "bun run --cwd demo/client dev"
+  },
+  "dependencies": {
+    "@opentui/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@opentui/react": "workspace:*",
+    "@opentui/solid": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/react": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opentui/react": "workspace:*",
+    "bun-types": "^1.0.0",
+    "react": ">=19.0.0",
+    "typescript": "^5.0.0"
+  }
+}

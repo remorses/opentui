@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenTUI Web Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background-color: #0a0a0a;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+    }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 20px;
+    }
+    header {
+      margin-bottom: 20px;
+    }
+    header h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    #status {
+      color: #888;
+    }
+    #status.connected {
+      color: #22c55e;
+    }
+    #status.disconnected {
+      color: #ef4444;
+    }
+    #terminal {
+      flex: 1;
+      background-color: #1a1a1a;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.2;
+      overflow: auto;
+      outline: none;
+      border: 1px solid #333;
+    }
+    #terminal:focus {
+      border-color: #4ECDC4;
+    }
+    .line {
+      white-space: pre;
+      display: flex;
+      min-height: 1.2em;
+    }
+    footer {
+      margin-top: 20px;
+      color: #666;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>OpenTUI Web Demo</h1>
+      <p>Status: <span id="status" class="disconnected">Disconnected</span></p>
+    </header>
+    <div id="terminal" tabindex="0"></div>
+    <footer>
+      <p>Click the terminal and use keyboard to interact.</p>
+      <p>Press + or - to change counter, r to reset, q to quit server.</p>
+    </footer>
+  </div>
+  <script type="module" src="./client.ts"></script>
+</body>
+</html>
