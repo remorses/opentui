@@ -195,7 +195,7 @@ export class OptimizedBuffer {
         const cellFg = rgbaToHex(fg[i * 4], fg[i * 4 + 1], fg[i * 4 + 2], fg[i * 4 + 3])
         const cellBg = rgbaToHex(bg[i * 4], bg[i * 4 + 1], bg[i * 4 + 2], bg[i * 4 + 3])
         const cellFlags = textAttrsToVTermFlags(attributes[i] & 0xff)
-        const cellChar = cp > 0 ? String.fromCodePoint(cp) : " "
+        const cellChar = cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : " "
 
         // Check if this cell continues the current span
         if (currentSpan && currentSpan.fg === cellFg && currentSpan.bg === cellBg && currentSpan.flags === cellFlags) {

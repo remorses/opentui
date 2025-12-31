@@ -9,8 +9,10 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["bun-types"]
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react",
+    // "types": ["bun-types"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "demo/**/*", ],
   "exclude": ["node_modules", "dist", "demo"]
 }

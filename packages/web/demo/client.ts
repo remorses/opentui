@@ -70,7 +70,6 @@ function lineToHtml(line: VTermLine): string {
 
 // DOM elements
 const terminal = document.getElementById("terminal")!
-const statusEl = document.getElementById("status")!
 
 // State
 let lines: VTermLine[] = []
@@ -82,9 +81,6 @@ const ws = new WebSocket(wsUrl)
 
 ws.onopen = () => {
   console.log("[opentui] Connected")
-  statusEl.textContent = "Connected"
-  statusEl.className = "connected"
-  
   // Send initial resize based on terminal size
   const cols = 80
   const rows = 24
@@ -93,14 +89,10 @@ ws.onopen = () => {
 
 ws.onclose = () => {
   console.log("[opentui] Disconnected")
-  statusEl.textContent = "Disconnected"
-  statusEl.className = "disconnected"
 }
 
 ws.onerror = (e) => {
   console.error("[opentui] Error:", e)
-  statusEl.textContent = "Error"
-  statusEl.className = "disconnected"
 }
 
 ws.onmessage = (event) => {
@@ -127,6 +119,9 @@ function renderFull(data: VTermData) {
   for (let i = 0; i < lines.length; i++) {
     const el = document.createElement("div")
     el.className = "line"
+    el.style.whiteSpace = "pre"
+    el.style.fontFamily = "inherit"
+    el.style.lineHeight = "1.2"
     el.innerHTML = lineToHtml(lines[i])
     terminal.appendChild(el)
     lineElements[i] = el
@@ -141,6 +136,9 @@ function applyDiff(changes: LineDiff[]) {
     while (lineElements.length <= index) {
       const el = document.createElement("div")
       el.className = "line"
+      el.style.whiteSpace = "pre"
+      el.style.fontFamily = "inherit"
+      el.style.lineHeight = "1.2"
       el.innerHTML = "<span>&nbsp;</span>"
       terminal.appendChild(el)
       lineElements.push(el)
@@ -153,10 +151,14 @@ function applyDiff(changes: LineDiff[]) {
 // Keyboard input
 terminal.addEventListener("keydown", (e) => {
   e.preventDefault()
+  console.log("[opentui] keydown:", e.key, "ws.readyState:", ws.readyState)
   
-  if (ws.readyState !== WebSocket.OPEN) return
+  if (ws.readyState !== WebSocket.OPEN) {
+    console.log("[opentui] ws not open, skipping")
+    return
+  }
   
-  ws.send(JSON.stringify({
+  const msg = {
     type: "key",
     key: e.key,
     modifiers: {
@@ -165,7 +167,9 @@ terminal.addEventListener("keydown", (e) => {
       alt: e.altKey,
       meta: e.metaKey,
     },
-  }))
+  }
+  console.log("[opentui] sending:", msg)
+  ws.send(JSON.stringify(msg))
 })
 
 // Focus terminal on click

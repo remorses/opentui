@@ -7,18 +7,19 @@ function CounterApp() {
   const [count, setCount] = useState(0)
   const [message, setMessage] = useState("Press +/-/arrows, r to reset")
 
-  useKeyboard((input, key) => {
-    console.log(`[key] input="${input}" key=${JSON.stringify(key)}`)
+  useKeyboard((e) => {
+    console.log(`[key] name="${e.name}" char="${e.char}"`)
     
-    if (input === "+" || input === "=" || key?.name === "up") {
+    const key = e.name || e.char
+    if (key === "+" || key === "=" || key === "up") {
       setCount((c) => c + 1)
-    } else if (input === "-" || input === "_" || key?.name === "down") {
+    } else if (key === "-" || key === "_" || key === "down") {
       setCount((c) => c - 1)
-    } else if (input === "r") {
+    } else if (key === "r") {
       setCount(0)
       setMessage("Counter reset!")
       setTimeout(() => setMessage("Press +/-/arrows, r to reset"), 2000)
-    } else if (input === "q") {
+    } else if (key === "q") {
       process.exit(0)
     }
   })

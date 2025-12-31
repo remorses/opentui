@@ -92,7 +92,12 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
       message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
         try {
           const data = JSON.parse(String(message)) as ClientMessage
-          sessionManager.handleMessage(ws.data.sessionId, data)
+          const sessionId = ws.data.sessionId
+          if (!sessionId) {
+            Bun.write(Bun.stderr, `[opentui/web] Message received before session created, ignoring: ${String(message).slice(0, 100)}\n`)
+            return
+          }
+          sessionManager.handleMessage(sessionId, data)
         } catch (error) {
           console.error("[opentui/web] Invalid message:", error)
         }

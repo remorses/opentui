@@ -133,7 +133,6 @@ export class TerminalRenderer {
       }
       .opentui-line {
         white-space: pre;
-        display: flex;
         height: 1.2em;
       }
       .opentui-line span {
@@ -178,6 +177,7 @@ export class TerminalRenderer {
     for (let i = 0; i < data.lines.length; i++) {
       const lineEl = document.createElement("div")
       lineEl.className = "opentui-line"
+      lineEl.style.cssText = "white-space: pre; height: 1.2em;"
       lineEl.dataset.line = String(i)
       lineEl.innerHTML = lineToHtml(data.lines[i])
       this.terminalEl.appendChild(lineEl)
@@ -194,6 +194,7 @@ export class TerminalRenderer {
       while (this.lineElements.length <= index) {
         const lineEl = document.createElement("div")
         lineEl.className = "opentui-line"
+        lineEl.style.cssText = "white-space: pre; height: 1.2em;"
         lineEl.dataset.line = String(this.lineElements.length)
         lineEl.innerHTML = '<span>&nbsp;</span>'
         this.terminalEl.appendChild(lineEl)

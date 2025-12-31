@@ -1,8 +1,35 @@
 import type { ServerWebSocket } from "bun"
 import type { VTermLine, VTermData, ClientMessage, ServerMessage, LineDiff } from "../shared/types"
 import { diffLines } from "../shared/span-differ"
-import { createWebRenderer, type WebRenderer } from "./web-renderer"
+import { createTestRenderer, MouseButtons } from "@opentui/core/testing"
 import type { CliRenderer } from "@opentui/core"
+
+// Map browser key names to KeyCodes names expected by mockInput.pressKey
+const browserKeyMap: Record<string, string> = {
+  ArrowUp: "ARROW_UP",
+  ArrowDown: "ARROW_DOWN",
+  ArrowLeft: "ARROW_LEFT",
+  ArrowRight: "ARROW_RIGHT",
+  Enter: "RETURN",
+  Backspace: "BACKSPACE",
+  Tab: "TAB",
+  Escape: "ESCAPE",
+  Delete: "DELETE",
+  Home: "HOME",
+  End: "END",
+  F1: "F1",
+  F2: "F2",
+  F3: "F3",
+  F4: "F4",
+  F5: "F5",
+  F6: "F6",
+  F7: "F7",
+  F8: "F8",
+  F9: "F9",
+  F10: "F10",
+  F11: "F11",
+  F12: "F12",
+}
 
 export interface Session {
   id: string
@@ -16,7 +43,7 @@ export interface Session {
 
 interface InternalSession {
   id: string
-  webRenderer: WebRenderer
+  testRenderer: Awaited<ReturnType<typeof createTestRenderer>>
   ws: ServerWebSocket<{ sessionId: string }>
   cols: number
   rows: number
@@ -53,11 +80,14 @@ export class SessionManager {
     const cols = Math.min(parseInt(query.get("cols") || "80"), this.maxCols)
     const rows = Math.min(parseInt(query.get("rows") || "24"), this.maxRows)
 
-    const webRenderer = await createWebRenderer({ cols, rows })
+    const testRenderer = await createTestRenderer({ width: cols, height: rows })
+
+    // Start the renderer so it can receive keyboard/mouse input
+    testRenderer.renderer.start()
 
     const session: InternalSession = {
       id,
-      webRenderer,
+      testRenderer,
       ws,
       cols,
       rows,
@@ -71,7 +101,7 @@ export class SessionManager {
     // Create public session interface
     const publicSession: Session = {
       id,
-      renderer: webRenderer.renderer,
+      renderer: testRenderer.renderer,
       cols,
       rows,
       query,
@@ -101,13 +131,15 @@ export class SessionManager {
     const session = this.sessions.get(sessionId)
     if (!session) return
 
-    const { webRenderer } = session
+    const { mockInput, mockMouse, resize } = session.testRenderer
 
     Bun.write(Bun.stderr, `[session] ${sessionId} received: ${JSON.stringify(message)}\n`)
 
     switch (message.type) {
       case "key":
-        webRenderer.injectKey(message.key, message.modifiers)
+        // Map browser key names to KeyCodes format
+        const mappedKey = browserKeyMap[message.key] || message.key
+        mockInput.pressKey(mappedKey, message.modifiers)
         session.dirty = true
         break
 
@@ -117,13 +149,14 @@ export class SessionManager {
           case "click":
           case "down":
           case "up":
-            webRenderer.injectMouseClick(message.x, message.y, message.button)
+            const button = message.button === 0 ? MouseButtons.LEFT : message.button === 2 ? MouseButtons.RIGHT : MouseButtons.MIDDLE
+            mockMouse.click(message.x, message.y, button)
             break
           case "move":
-            webRenderer.injectMouseMove(message.x, message.y)
+            mockMouse.moveTo(message.x, message.y)
             break
           case "scroll":
-            webRenderer.injectMouseScroll(message.x, message.y, message.button === 4 ? "up" : "down")
+            mockMouse.scroll(message.x, message.y, message.button === 4 ? "up" : "down")
             break
         }
         session.dirty = true
@@ -132,7 +165,7 @@ export class SessionManager {
       case "resize":
         const newCols = Math.min(message.cols, this.maxCols)
         const newRows = Math.min(message.rows, this.maxRows)
-        webRenderer.resize(newCols, newRows)
+        resize(newCols, newRows)
         session.cols = newCols
         session.rows = newRows
         session.dirty = true
@@ -155,7 +188,7 @@ export class SessionManager {
     }
 
     // Destroy renderer
-    session.webRenderer.destroy()
+    session.testRenderer.renderer.destroy()
 
     this.sessions.delete(sessionId)
 
@@ -179,9 +212,9 @@ export class SessionManager {
   private async tickSession(session: InternalSession) {
     try {
       // Always render to process any pending updates
-      await session.webRenderer.render()
+      await session.testRenderer.renderOnce()
 
-      const data = session.webRenderer.captureSpans()
+      const data = session.testRenderer.captureSpans()
 
       // Check if this is first frame or resize (need full update)
       if (session.lastLines.length === 0) {
