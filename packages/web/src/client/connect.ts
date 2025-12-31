@@ -126,7 +126,12 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
   const handleMouseDown = (e: MouseEvent) => {
     const { x, y } = getTerminalCoords(e)
-    send({ type: "mouse", action: "click", x, y, button: e.button })
+    send({ type: "mouse", action: "down", x, y, button: e.button })
+  }
+
+  const handleMouseUp = (e: MouseEvent) => {
+    const { x, y } = getTerminalCoords(e)
+    send({ type: "mouse", action: "up", x, y, button: e.button })
   }
 
   const handleWheel = (e: WheelEvent) => {
@@ -139,6 +144,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   // Attach event listeners
   container.addEventListener("keydown", handleKeyDown)
   container.addEventListener("mousedown", handleMouseDown)
+  container.addEventListener("mouseup", handleMouseUp)
   container.addEventListener("wheel", handleWheel, { passive: false })
 
   // Make container focusable
@@ -167,6 +173,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       ws.close()
       container.removeEventListener("keydown", handleKeyDown)
       container.removeEventListener("mousedown", handleMouseDown)
+      container.removeEventListener("mouseup", handleMouseUp)
       container.removeEventListener("wheel", handleWheel)
       resizeObserver.disconnect()
       renderer.destroy()

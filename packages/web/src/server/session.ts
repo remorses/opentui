@@ -145,14 +145,16 @@ export class SessionManager {
         this.tickSession(session)
         break
 
-      case "mouse":
+      case "mouse": {
         if (!message.action) break
+        const button =
+          message.button === 0 ? MouseButtons.LEFT : message.button === 2 ? MouseButtons.RIGHT : MouseButtons.MIDDLE
         switch (message.action) {
-          case "click":
           case "down":
+            mockMouse.pressDown(message.x, message.y, button)
+            break
           case "up":
-            const button = message.button === 0 ? MouseButtons.LEFT : message.button === 2 ? MouseButtons.RIGHT : MouseButtons.MIDDLE
-            mockMouse.click(message.x, message.y, button)
+            mockMouse.release(message.x, message.y, button)
             break
           case "move":
             mockMouse.moveTo(message.x, message.y)
@@ -163,6 +165,7 @@ export class SessionManager {
         }
         session.dirty = true
         break
+      }
 
       case "resize":
         const newCols = Math.min(message.cols, this.maxCols)

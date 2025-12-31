@@ -12,7 +12,7 @@ export interface Modifiers {
 // Client -> Server messages
 export type ClientMessage =
   | { type: "key"; key: string; modifiers?: Modifiers }
-  | { type: "mouse"; action: "click" | "down" | "up" | "move" | "scroll"; x: number; y: number; button?: number }
+  | { type: "mouse"; action: "down" | "up" | "move" | "scroll"; x: number; y: number; button?: number }
   | { type: "resize"; cols: number; rows: number }
   | { type: "ping" }
 
