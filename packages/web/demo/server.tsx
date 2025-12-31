@@ -5,17 +5,19 @@ import { useState } from "react"
 // Simple counter app component
 function CounterApp() {
   const [count, setCount] = useState(0)
-  const [message, setMessage] = useState("Press +/- to change count, r to reset")
+  const [message, setMessage] = useState("Press +/-/arrows, r to reset")
 
-  useKeyboard((input) => {
-    if (input === "+" || input === "=") {
+  useKeyboard((input, key) => {
+    console.log(`[key] input="${input}" key=${JSON.stringify(key)}`)
+    
+    if (input === "+" || input === "=" || key?.name === "up") {
       setCount((c) => c + 1)
-    } else if (input === "-" || input === "_") {
+    } else if (input === "-" || input === "_" || key?.name === "down") {
       setCount((c) => c - 1)
     } else if (input === "r") {
       setCount(0)
       setMessage("Counter reset!")
-      setTimeout(() => setMessage("Press +/- to change count, r to reset"), 2000)
+      setTimeout(() => setMessage("Press +/-/arrows, r to reset"), 2000)
     } else if (input === "q") {
       process.exit(0)
     }
@@ -30,7 +32,7 @@ function CounterApp() {
       </box>
 
       <box
-        borderStyle="round"
+        borderStyle="single"
         borderColor="#888"
         padding={1}
         flexDirection="column"
@@ -49,7 +51,7 @@ function CounterApp() {
 
       <box marginTop={1} flexDirection="column">
         <text fg="#666">Controls:</text>
-        <text fg="#666">  + / - : Increment / Decrement</text>
+        <text fg="#666">  +/-/↑/↓ : Increment / Decrement</text>
         <text fg="#666">  r     : Reset</text>
         <text fg="#666">  q     : Quit server</text>
       </box>

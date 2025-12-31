@@ -103,6 +103,8 @@ export class SessionManager {
 
     const { webRenderer } = session
 
+    Bun.write(Bun.stderr, `[session] ${sessionId} received: ${JSON.stringify(message)}\n`)
+
     switch (message.type) {
       case "key":
         webRenderer.injectKey(message.key, message.modifiers)
@@ -110,8 +112,11 @@ export class SessionManager {
         break
 
       case "mouse":
+        if (!message.action) break
         switch (message.action) {
           case "click":
+          case "down":
+          case "up":
             webRenderer.injectMouseClick(message.x, message.y, message.button)
             break
           case "move":
