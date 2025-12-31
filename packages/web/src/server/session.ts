@@ -141,6 +141,8 @@ export class SessionManager {
         const mappedKey = browserKeyMap[message.key] || message.key
         mockInput.pressKey(mappedKey, message.modifiers)
         session.dirty = true
+        // Trigger immediate render after input
+        this.tickSession(session)
         break
 
       case "mouse":
