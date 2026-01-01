@@ -4,21 +4,27 @@ import { testRender } from "@opentui/react/test-utils"
 const CURSOR = "█" // Block cursor character
 
 /**
- * Capture frame as grid with cursor marker inserted at cursor position
+ * Capture frame as grid with cursor marker inserted at cursor position.
+ * Note: getCursorState() returns 1-based coordinates (terminal convention),
+ * but we need 0-based for array indexing.
  */
 function captureWithCursor(setup: Awaited<ReturnType<typeof testRender>>): string {
   const cursor = setup.renderer.getCursorState()
   const frame = setup.captureCharFrame()
   const lines = frame.split("\n")
 
-  if (cursor.visible && cursor.y < lines.length) {
-    const line = lines[cursor.y]
+  // Convert from 1-based terminal coordinates to 0-based array indices
+  const cursorX = cursor.x - 1
+  const cursorY = cursor.y - 1
+
+  if (cursor.visible && cursorY >= 0 && cursorY < lines.length) {
+    const line = lines[cursorY]
     // Convert to array to handle unicode properly
     const chars = [...line]
-    if (cursor.x <= chars.length) {
+    if (cursorX >= 0 && cursorX <= chars.length) {
       // Replace char at cursor position with cursor marker
-      chars[cursor.x] = CURSOR
-      lines[cursor.y] = chars.join("")
+      chars[cursorX] = CURSOR
+      lines[cursorY] = chars.join("")
     }
   }
 
@@ -37,8 +43,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"               
- █             
+"█              
+               
                
 "
 `)
@@ -51,8 +57,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hello          
-      █        
+"hello█         
+               
                
 "
 `)
@@ -63,8 +69,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"test           
-     █         
+"test█          
+               
                
 "
 `)
@@ -78,8 +84,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hello          
-    █          
+"hel█o          
+               
                
 "
 `)
@@ -92,8 +98,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hello          
- █             
+"█ello          
+               
                
 "
 `)
@@ -108,8 +114,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hello          
-      █        
+"hello█         
+               
                
 "
 `)
@@ -122,8 +128,8 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hell           
-     █         
+"hell█          
+               
                
 "
 `)
@@ -138,8 +144,8 @@ describe("Cursor Position Tests", () => {
 
     // Cursor should be after 'h'
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hllo           
-  █            
+"h█lo           
+               
                
 "
 `)
@@ -149,22 +155,30 @@ describe("Cursor Position Tests", () => {
     await setup.renderOnce()
 
     expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
-"hello          
-   █           
+"he█lo          
+               
                
 "
 `)
   })
 
-  test("unfocused input - no cursor change", async () => {
+  test("unfocused input - cursor not shown", async () => {
     setup = await testRender(<input value="hello" />, { width: 15, height: 3 })
-    const before = setup.renderer.getCursorState()
+    // Manually blur the input since it's not focused
+    const input = setup.renderer.root.getChildren()[0]
+    input.blur()
     await setup.renderOnce()
-    const after = setup.renderer.getCursorState()
 
-    // Cursor position unchanged
-    expect(after.x).toBe(before.x)
-    expect(after.y).toBe(before.y)
+    const cursor = setup.renderer.getCursorState()
+    expect(cursor.visible).toBe(false)
+
+    // No cursor marker in snapshot when not focused
+    expect(captureWithCursor(setup)).toMatchInlineSnapshot(`
+      "hello          
+                     
+                     
+      "
+    `)
   })
 
   test("captureSpans includes cursor data", async () => {
@@ -173,7 +187,7 @@ describe("Cursor Position Tests", () => {
 
     const data = setup.captureSpans()
     expect(data.cursorVisible).toBe(true)
-    expect(data.cursor).toEqual([3, 1]) // After "AB" with offset
+    expect(data.cursor).toEqual([3, 1]) // After "AB" (1-based terminal coordinates)
   })
 
   test("cursor position in captureSpans updates on movement", async () => {

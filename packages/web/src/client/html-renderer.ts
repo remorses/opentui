@@ -232,9 +232,13 @@ export class TerminalRenderer {
       return
     }
 
+    // Convert from 1-based terminal coordinates to 0-based CSS positioning
+    const cssX = x - 1
+    const cssY = y - 1
+
     this.cursorEl.style.display = "block"
-    this.cursorEl.style.left = `${x}ch`
-    this.cursorEl.style.top = `${y * 1.2}em`
+    this.cursorEl.style.left = `${cssX}ch`
+    this.cursorEl.style.top = `${cssY * 1.2}em`
   }
 
   getSize(): { cols: number; rows: number } {
