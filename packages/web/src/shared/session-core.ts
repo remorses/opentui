@@ -61,13 +61,13 @@ export class SessionCore {
   public cols: number
   public rows: number
   public testRenderer!: Awaited<ReturnType<typeof createTestRenderer>>
-  
+
   private maxCols: number
   private maxRows: number
   private frameRate: number
   private send: (message: ServerMessage) => void
   private onConnection: (session: Session) => void | (() => void)
-  
+
   private lastLines: VTermLine[] = []
   private lastCursor: { x: number; y: number; visible: boolean } | null = null
   private cleanup?: () => void
@@ -117,7 +117,7 @@ export class SessionCore {
   /** Handle incoming message from client */
   handleMessage(message: ClientMessage): void {
     if (this.destroyed) return
-    
+
     const { mockInput, mockMouse, resize } = this.testRenderer
 
     switch (message.type) {
@@ -201,7 +201,7 @@ export class SessionCore {
 
   private async tick(): Promise<void> {
     if (this.destroyed) return
-    
+
     // If already rendering, mark that we need another render
     if (this.rendering) {
       this.pendingRender = true
@@ -240,7 +240,12 @@ export class SessionCore {
 
       // Send cursor update if changed
       const lastCursor = this.lastCursor
-      if (!lastCursor || lastCursor.x !== cursor.x || lastCursor.y !== cursor.y || lastCursor.visible !== cursor.visible) {
+      if (
+        !lastCursor ||
+        lastCursor.x !== cursor.x ||
+        lastCursor.y !== cursor.y ||
+        lastCursor.visible !== cursor.visible
+      ) {
         this.send({ type: "cursor", ...cursor })
         this.lastCursor = cursor
       }

@@ -21,16 +21,22 @@ export const WebSocketState = {
  * Adapter for Bun's ServerWebSocket
  */
 export class ServerWebSocketAdapter implements WebSocketLike {
-  constructor(private ws: { send(data: string | ArrayBuffer): void; close(code?: number, reason?: string): void; readyState: number }) {}
-  
+  constructor(
+    private ws: {
+      send(data: string | ArrayBuffer): void
+      close(code?: number, reason?: string): void
+      readyState: number
+    },
+  ) {}
+
   send(data: string | ArrayBuffer): void {
     this.ws.send(data)
   }
-  
+
   close(code?: number, reason?: string): void {
     this.ws.close(code, reason)
   }
-  
+
   get readyState(): number {
     return this.ws.readyState
   }
@@ -41,15 +47,15 @@ export class ServerWebSocketAdapter implements WebSocketLike {
  */
 export class ClientWebSocketAdapter implements WebSocketLike {
   constructor(private ws: WebSocket) {}
-  
+
   send(data: string | ArrayBuffer): void {
     this.ws.send(data)
   }
-  
+
   close(code?: number, reason?: string): void {
     this.ws.close(code, reason)
   }
-  
+
   get readyState(): number {
     return this.ws.readyState
   }

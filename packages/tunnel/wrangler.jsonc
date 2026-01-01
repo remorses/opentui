@@ -6,20 +6,20 @@
   "assets": {
     "directory": "cloudflare/public",
     "binding": "ASSETS",
-    "run_worker_first": true
+    "run_worker_first": true,
   },
   "routes": [
     {
       "pattern": "opentui.net/s/*",
-      "zone_name": "opentui.net"
+      "zone_name": "opentui.net",
     },
     {
       "pattern": "opentui.net/health",
-      "zone_name": "opentui.net"
+      "zone_name": "opentui.net",
     },
     {
       "pattern": "opentui.net/",
-      "zone_name": "opentui.net"
-    }
-  ]
+      "zone_name": "opentui.net",
+    },
+  ],
 }

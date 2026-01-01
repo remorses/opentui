@@ -19,12 +19,7 @@ export type {
 export { SessionCore, type SessionCoreOptions } from "./shared/session-core"
 
 // WebSocket abstraction
-export { 
-  type WebSocketLike, 
-  WebSocketState,
-  ServerWebSocketAdapter,
-  ClientWebSocketAdapter,
-} from "./shared/websocket"
+export { type WebSocketLike, WebSocketState, ServerWebSocketAdapter, ClientWebSocketAdapter } from "./shared/websocket"
 
 // Utilities
 export { diffLines, applyDiff } from "./shared/span-differ"

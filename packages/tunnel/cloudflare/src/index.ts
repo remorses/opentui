@@ -1,11 +1,11 @@
 /**
  * Cloudflare Worker that serves the OpenTUI web client.
- * 
+ *
  * Routes:
  * - GET /s/{tunnelId} - Serves HTML client that connects to the tunnel
  * - GET /health - Health check endpoint
  * - GET / - Redirects to GitHub
- * 
+ *
  * The tunnel WebSocket itself is hosted separately at /_tunnel/*
  */
 
@@ -38,7 +38,7 @@ export default {
     // Serve client HTML at /s/{tunnelId}
     if (url.pathname.startsWith("/s/")) {
       const tunnelId = url.pathname.slice(3)
-      
+
       if (!tunnelId || tunnelId.includes("/")) {
         return new Response("Invalid tunnel ID", { status: 400 })
       }
@@ -46,7 +46,7 @@ export default {
       // Fetch the static HTML from assets
       const assetUrl = new URL("/index.html", request.url)
       const response = await env.ASSETS.fetch(assetUrl)
-      
+
       // Return the HTML with correct content type
       return new Response(response.body, {
         status: response.status,

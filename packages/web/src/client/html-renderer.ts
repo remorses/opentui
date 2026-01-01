@@ -28,7 +28,13 @@ export function getTerminalSize(options: {
   maxCols?: number
   maxRows?: number
 }): { cols: number; rows: number } {
-  const { width, height, fontSize = DEFAULT_FONT_SIZE, maxCols = DEFAULT_MAX_COLS, maxRows = DEFAULT_MAX_ROWS } = options
+  const {
+    width,
+    height,
+    fontSize = DEFAULT_FONT_SIZE,
+    maxCols = DEFAULT_MAX_COLS,
+    maxRows = DEFAULT_MAX_ROWS,
+  } = options
   const metrics = getTerminalMetrics({ fontSize })
   return {
     cols: Math.min(Math.floor(width / metrics.charWidth), maxCols),
@@ -111,7 +117,7 @@ function spanToHtml(span: VTermSpan): string {
 
 function lineToHtml(line: VTermLine): string {
   if (line.spans.length === 0) {
-    return '<span>&nbsp;</span>'
+    return "<span>&nbsp;</span>"
   }
   return line.spans.map(spanToHtml).join("")
 }
@@ -304,7 +310,7 @@ export class TerminalRenderer {
         lineEl.className = "opentui-line"
         lineEl.style.cssText = "white-space: pre; height: 1.2em;"
         lineEl.dataset.line = String(this.lineElements.length)
-        lineEl.innerHTML = '<span>&nbsp;</span>'
+        lineEl.innerHTML = "<span>&nbsp;</span>"
         this.terminalEl.appendChild(lineEl)
         this.lineElements.push(lineEl)
       }

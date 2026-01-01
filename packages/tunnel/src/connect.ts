@@ -5,16 +5,16 @@ const DEFAULT_TUNNEL_URL = "wss://opentui.net/_tunnel"
 const DEFAULT_HTML_URL = "https://opentui.net"
 
 export interface TunnelOptions {
-  /** 
+  /**
    * Tunnel ID - acts as the secret for this tunnel.
    * If not provided, a random UUID will be generated.
    * Use a custom ID if you want to host the client yourself.
    */
   tunnelId?: string
 
-  /** 
-   * Tunnel WebSocket URL. 
-   * Defaults to wss://opentui.net/_tunnel 
+  /**
+   * Tunnel WebSocket URL.
+   * Defaults to wss://opentui.net/_tunnel
    */
   tunnelUrl?: string
 
@@ -78,12 +78,12 @@ export interface TunnelConnection {
 /**
  * Connect to a WebSocket tunnel to expose your OpenTUI app via a public URL.
  * Returns a promise that resolves when connected, or rejects on error.
- * 
+ *
  * @example
  * ```ts
  * import { connectTunnel } from '@opentui/tunnel'
  * import { createRoot } from '@opentui/react'
- * 
+ *
  * const tunnel = await connectTunnel({
  *   onConnection: (session) => {
  *     const root = createRoot(session.renderer)
@@ -91,7 +91,7 @@ export interface TunnelConnection {
  *     return () => root.unmount()
  *   }
  * })
- * 
+ *
  * console.log(`Share: ${tunnel.info.htmlUrl}`)
  * ```
  */
@@ -219,7 +219,7 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
         console.error("   1. Stop the other instance first")
         console.error("   2. Use a different tunnelId")
         console.error("   3. Wait for the other instance to disconnect\n")
-        
+
         if (!wasConnected) {
           reject(error)
         } else {

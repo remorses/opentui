@@ -83,7 +83,10 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
           const query = ws.data.query || new URLSearchParams()
           const sessionId = await sessionManager.createSession(ws as any, query)
           ws.data.sessionId = sessionId
-          Bun.write(Bun.stderr, `[opentui/web] Session ${sessionId} connected (${sessionManager.getSessionCount()} active)\n`)
+          Bun.write(
+            Bun.stderr,
+            `[opentui/web] Session ${sessionId} connected (${sessionManager.getSessionCount()} active)\n`,
+          )
         } catch (error) {
           console.error(`[opentui/web] Error creating session:`, error)
         }
@@ -94,7 +97,10 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
           const data = JSON.parse(String(message)) as ClientMessage
           const sessionId = ws.data.sessionId
           if (!sessionId) {
-            Bun.write(Bun.stderr, `[opentui/web] Message received before session created, ignoring: ${String(message).slice(0, 100)}\n`)
+            Bun.write(
+              Bun.stderr,
+              `[opentui/web] Message received before session created, ignoring: ${String(message).slice(0, 100)}\n`,
+            )
             return
           }
           sessionManager.handleMessage(sessionId, data)
@@ -106,7 +112,10 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
       close(ws: ServerWebSocket<WebSocketData>) {
         const sessionId = ws.data.sessionId
         sessionManager.destroySession(sessionId)
-        Bun.write(Bun.stderr, `[opentui/web] Session ${sessionId} disconnected (${sessionManager.getSessionCount()} active)\n`)
+        Bun.write(
+          Bun.stderr,
+          `[opentui/web] Session ${sessionId} disconnected (${sessionManager.getSessionCount()} active)\n`,
+        )
       },
     },
 

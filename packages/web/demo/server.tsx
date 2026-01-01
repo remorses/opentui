@@ -154,11 +154,7 @@ function OverviewTab() {
         titleAlignment="left"
         height={5}
       >
-        <textarea
-          focused
-          initialValue="hello world test"
-          style={{ flexGrow: 1, backgroundColor: theme.bg }}
-        />
+        <textarea focused initialValue="hello world test" style={{ flexGrow: 1, backgroundColor: theme.bg }} />
       </box>
 
       {/* Keyboard hints */}
@@ -228,14 +224,7 @@ function ScrollTab() {
       focused
     >
       {Array.from({ length: 12 }).map((_, i) => {
-        const colors = [
-          "#1a1b26",
-          "#24283b",
-          "#292e42",
-          "#414868",
-          "#2e3440",
-          "#3b4252",
-        ]
+        const colors = ["#1a1b26", "#24283b", "#292e42", "#414868", "#2e3440", "#3b4252"]
         const borderColors = [theme.accent, theme.success, theme.warning, theme.info, theme.error, "#b48ead"]
         const bg = colors[i % colors.length]
         const borderColor = borderColors[i % borderColors.length]
@@ -301,14 +290,7 @@ function ColorsTab() {
       </box>
 
       {/* Text styles */}
-      <box
-        marginTop={1}
-        border
-        borderStyle="double"
-        borderColor={theme.border}
-        padding={1}
-        title="Text Formatting"
-      >
+      <box marginTop={1} border borderStyle="double" borderColor={theme.border} padding={1} title="Text Formatting">
         <text>
           <strong>Bold</strong>
           <span fg={theme.dimmed}> | </span>
