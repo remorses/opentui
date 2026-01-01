@@ -104,6 +104,19 @@ export class SessionCore {
       close: closeSession,
     }
 
+    // Listen for selection changes
+    this.testRenderer.renderer.on("selection", (selection) => {
+      if (selection) {
+        this.send({
+          type: "selection",
+          anchor: selection.anchor,
+          focus: selection.focus,
+        })
+      } else {
+        this.send({ type: "selection-clear" })
+      }
+    })
+
     // Call user's onConnection handler
     const cleanup = this.onConnection(publicSession)
     if (cleanup) {

@@ -22,6 +22,8 @@ export type ServerMessage =
   | { type: "full"; data: VTermData }
   | { type: "diff"; changes: LineDiff[] }
   | { type: "cursor"; x: number; y: number; visible: boolean }
+  | { type: "selection"; anchor: { x: number; y: number }; focus: { x: number; y: number } }
+  | { type: "selection-clear" }
   | { type: "pong" }
   | { type: "error"; message: string }
 

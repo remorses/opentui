@@ -103,6 +103,12 @@ export interface CanvasRendererOptions {
   fontSize?: number
   /** Line height multiplier (default: 1.2) */
   lineHeight?: number
+  /** Font weight for normal text (default: "normal"). Can be string or number (100-900) */
+  fontWeight?: string | number
+  /** Font weight for bold text (default: "bold"). Can be string or number (100-900) */
+  fontWeightBold?: string | number
+  /** Letter spacing in pixels (default: 0) */
+  letterSpacing?: number
   backgroundColor?: string
   textColor?: string
   devicePixelRatio?: number
@@ -127,9 +133,13 @@ export class CanvasRenderer {
   private fontSize: number
   private lineHeightMultiplier: number
   private fontFamily: string
+  private fontWeight: string | number
+  private fontWeightBold: string | number
+  private letterSpacing: number
   private backgroundColor: string
   private textColor: string
   private dpr: number
+  private textBaseline: CanvasTextBaseline
 
   private cols: number = 80
   private rows: number = 24
@@ -148,6 +158,9 @@ export class CanvasRenderer {
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
     this.lineHeightMultiplier = options.lineHeight ?? DEFAULT_LINE_HEIGHT
     this.fontFamily = options.fontFamily ?? "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+    this.fontWeight = options.fontWeight ?? "normal"
+    this.fontWeightBold = options.fontWeightBold ?? "bold"
+    this.letterSpacing = options.letterSpacing ?? 0
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
     this.userProvidedBackground = options.backgroundColor !== undefined && 
       options.backgroundColor !== "transparent" && 
@@ -155,6 +168,11 @@ export class CanvasRenderer {
     this.textColor = options.textColor ?? DEFAULT_FG
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
     this.onResize = options.onResize
+
+    // Use 'ideographic' baseline for better glyph alignment (like xterm.js)
+    // Firefox needs 'bottom' for correct rendering
+    const isFirefox = typeof navigator !== "undefined" && navigator.userAgent.includes("Firefox")
+    this.textBaseline = isFirefox ? "bottom" : "ideographic"
 
     // Check font availability after fonts are loaded (handles web fonts)
     document.fonts.ready.then(() => {
@@ -272,7 +290,8 @@ export class CanvasRenderer {
     ctx.font = `${this.fontSize}px ${this.fontFamily}`
 
     const metrics = ctx.measureText("M")
-    const charWidth = Math.ceil(metrics.width)
+    // Add letter spacing to character width
+    const charWidth = Math.ceil(metrics.width + this.letterSpacing)
 
     // Use actualBoundingBox for accurate height, fallback to fontSize-based estimate
     const ascent = metrics.actualBoundingBoxAscent ?? this.fontSize * 0.8
@@ -360,6 +379,16 @@ export class CanvasRenderer {
   private clear(): void {
     this.ctx.fillStyle = this.backgroundColor
     this.ctx.fillRect(0, 0, this.cols * this.metrics.charWidth, this.rows * this.metrics.charHeight)
+  }
+
+  /**
+   * Snap a coordinate to the physical pixel grid for crisp line rendering.
+   * When ctx.scale(dpr, dpr) is active, we need to snap to physical pixel centers.
+   */
+  private snapToPixel(value: number): number {
+    const physical = value * this.dpr
+    const snappedPhysical = Math.round(physical + 0.5) - 0.5
+    return snappedPhysical / this.dpr
   }
 
   renderFull(data: VTermData): void {
@@ -458,14 +487,13 @@ export class CanvasRenderer {
     // Handle faint
     const alpha = span.flags & StyleFlags.FAINT ? 0.5 : 1
 
-    // Build font string
-    let fontStyle = ""
-    if (span.flags & StyleFlags.BOLD) fontStyle += "bold "
-    if (span.flags & StyleFlags.ITALIC) fontStyle += "italic "
-    const font = `${fontStyle}${this.fontSize}px ${this.fontFamily}`
+    // Build font string with proper weight control
+    const weight = span.flags & StyleFlags.BOLD ? this.fontWeightBold : this.fontWeight
+    const italic = span.flags & StyleFlags.ITALIC ? "italic " : ""
+    const font = `${italic}${weight} ${this.fontSize}px ${this.fontFamily}`
 
     this.ctx.font = font
-    this.ctx.textBaseline = "alphabetic"
+    this.ctx.textBaseline = this.textBaseline
 
     let x = startX
 
@@ -474,11 +502,11 @@ export class CanvasRenderer {
       const cellX = x * this.metrics.charWidth
       const cellY = y
 
-      // Draw background if not default
-      if (bg && bg !== "#00000000" && bg !== "transparent") {
-        this.ctx.fillStyle = bg
-        this.ctx.fillRect(cellX, cellY, this.metrics.charWidth * (span.width || 1), this.metrics.charHeight)
-      }
+      // Always fill background for proper anti-aliasing (even if "transparent")
+      // This ensures text edges blend correctly with the background
+      const effectiveBg = bg && bg !== "#00000000" && bg !== "transparent" ? bg : this.backgroundColor
+      this.ctx.fillStyle = effectiveBg
+      this.ctx.fillRect(cellX, cellY, this.metrics.charWidth * (span.width || 1), this.metrics.charHeight)
 
       // Check for custom glyph
       const customGlyph = customGlyphDefinitions[char]
@@ -492,22 +520,23 @@ export class CanvasRenderer {
         this.ctx.globalAlpha = 1
       }
 
-      // Draw underline
+      // Draw underline (with pixel snapping for crisp lines)
       if (span.flags & StyleFlags.UNDERLINE) {
         this.ctx.strokeStyle = fg
         this.ctx.lineWidth = 1
         this.ctx.beginPath()
-        this.ctx.moveTo(cellX, cellY + this.metrics.baseline + 2)
-        this.ctx.lineTo(cellX + this.metrics.charWidth, cellY + this.metrics.baseline + 2)
+        const underlineY = this.snapToPixel(cellY + this.metrics.baseline + 2)
+        this.ctx.moveTo(cellX, underlineY)
+        this.ctx.lineTo(cellX + this.metrics.charWidth, underlineY)
         this.ctx.stroke()
       }
 
-      // Draw strikethrough
+      // Draw strikethrough (with pixel snapping for crisp lines)
       if (span.flags & StyleFlags.STRIKETHROUGH) {
         this.ctx.strokeStyle = fg
         this.ctx.lineWidth = 1
         this.ctx.beginPath()
-        const strikeY = cellY + this.metrics.charHeight / 2
+        const strikeY = this.snapToPixel(cellY + this.metrics.charHeight / 2)
         this.ctx.moveTo(cellX, strikeY)
         this.ctx.lineTo(cellX + this.metrics.charWidth, strikeY)
         this.ctx.stroke()
@@ -523,7 +552,17 @@ export class CanvasRenderer {
     this.ctx.globalAlpha = alpha
 
     if (glyph.type === "path") {
-      drawPath(this.ctx, glyph.data, x, y, this.metrics.charWidth, this.metrics.charHeight, glyph.strokeWidth, color)
+      drawPath(
+        this.ctx,
+        glyph.data,
+        x,
+        y,
+        this.metrics.charWidth,
+        this.metrics.charHeight,
+        glyph.strokeWidth,
+        color,
+        this.dpr
+      )
     } else if (glyph.type === "block") {
       drawBlocks(this.ctx, glyph.rects, x, y, this.metrics.charWidth, this.metrics.charHeight, color)
     }
@@ -550,6 +589,58 @@ export class CanvasRenderer {
 
   getSize(): { cols: number; rows: number } {
     return { cols: this.cols, rows: this.rows }
+  }
+
+  setSelection(anchor: { x: number; y: number }, focus: { x: number; y: number }): void {
+    // Normalize to start/end (anchor could be after focus if selecting backwards)
+    const startY = Math.min(anchor.y, focus.y)
+    const endY = Math.max(anchor.y, focus.y)
+    const startX = anchor.y < focus.y ? anchor.x : anchor.y > focus.y ? focus.x : Math.min(anchor.x, focus.x)
+    const endX = anchor.y < focus.y ? focus.x : anchor.y > focus.y ? anchor.x : Math.max(anchor.x, focus.x)
+
+    const startLine = this.textLayer.children[startY] as HTMLDivElement
+    const endLine = this.textLayer.children[endY] as HTMLDivElement
+    if (!startLine || !endLine) return
+
+    const selection = window.getSelection()
+    if (!selection) return
+
+    selection.removeAllRanges()
+
+    const range = document.createRange()
+    const startNode = this.getTextNodeAtColumn(startLine, startX)
+    const endNode = this.getTextNodeAtColumn(endLine, endX)
+
+    if (startNode && endNode) {
+      range.setStart(startNode.node, startNode.offset)
+      range.setEnd(endNode.node, endNode.offset)
+      selection.addRange(range)
+    }
+  }
+
+  clearSelection(): void {
+    window.getSelection()?.removeAllRanges()
+  }
+
+  private getTextNodeAtColumn(lineEl: HTMLDivElement, col: number): { node: Text; offset: number } | null {
+    const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
+    let currentCol = 0
+    let node: Text | null
+
+    while ((node = walker.nextNode() as Text | null)) {
+      const text = node.textContent || ""
+      if (currentCol + text.length >= col) {
+        return { node, offset: Math.min(col - currentCol, text.length) }
+      }
+      currentCol += text.length
+    }
+
+    // Return last text node if col is beyond content
+    const lastNode = walker.currentNode as Text
+    if (lastNode?.nodeType === Node.TEXT_NODE) {
+      return { node: lastNode, offset: lastNode.textContent?.length || 0 }
+    }
+    return null
   }
 
   destroy(): void {

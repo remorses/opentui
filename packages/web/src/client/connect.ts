@@ -104,6 +104,14 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
           renderer.updateCursor(message.x, message.y, message.visible)
           break
 
+        case "selection":
+          renderer.setSelection(message.anchor, message.focus)
+          break
+
+        case "selection-clear":
+          renderer.clearSelection()
+          break
+
         case "error":
           console.error("[opentui/web] Server error:", message.message)
           onError?.(new Error(message.message))
@@ -162,12 +170,22 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     return { x: Math.max(0, x), y: Math.max(0, y) }
   }
 
+  let isDragging = false
+
   const handleMouseDown = (e: MouseEvent) => {
+    isDragging = true
     const { x, y } = getTerminalCoords(e)
     send({ type: "mouse", action: "down", x, y, button: e.button })
   }
 
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return
+    const { x, y } = getTerminalCoords(e)
+    send({ type: "mouse", action: "move", x, y })
+  }
+
   const handleMouseUp = (e: MouseEvent) => {
+    isDragging = false
     const { x, y } = getTerminalCoords(e)
     send({ type: "mouse", action: "up", x, y, button: e.button })
   }
@@ -201,6 +219,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   // Attach event listeners
   container.addEventListener("keydown", handleKeyDown)
   container.addEventListener("mousedown", handleMouseDown)
+  container.addEventListener("mousemove", handleMouseMove)
   container.addEventListener("mouseup", handleMouseUp)
   container.addEventListener("wheel", handleWheel, { passive: false })
 
@@ -216,6 +235,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       ws.close()
       container.removeEventListener("keydown", handleKeyDown)
       container.removeEventListener("mousedown", handleMouseDown)
+      container.removeEventListener("mousemove", handleMouseMove)
       container.removeEventListener("mouseup", handleMouseUp)
       container.removeEventListener("wheel", handleWheel)
       renderer.destroy()

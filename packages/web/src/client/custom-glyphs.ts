@@ -39,85 +39,85 @@ export type GlyphDefinition =
 // Box Drawing (U+2500-U+257F) and Block Elements (U+2580-U+259F)
 export const customGlyphDefinitions: Record<string, GlyphDefinition> = {
   // Light and heavy solid lines
-  "─": { type: "path", data: Shapes.LEFT_TO_RIGHT, strokeWidth: 1 },
-  "━": { type: "path", data: Shapes.LEFT_TO_RIGHT, strokeWidth: 3 },
-  "│": { type: "path", data: Shapes.TOP_TO_BOTTOM, strokeWidth: 1 },
-  "┃": { type: "path", data: Shapes.TOP_TO_BOTTOM, strokeWidth: 3 },
+  "─": { type: "path", data: Shapes.LEFT_TO_RIGHT, strokeWidth: 2 },
+  "━": { type: "path", data: Shapes.LEFT_TO_RIGHT, strokeWidth: 4 },
+  "│": { type: "path", data: Shapes.TOP_TO_BOTTOM, strokeWidth: 2 },
+  "┃": { type: "path", data: Shapes.TOP_TO_BOTTOM, strokeWidth: 4 },
 
   // Dashed lines
-  "┄": { type: "path", data: Shapes.THREE_DASHES_H, strokeWidth: 1 },
-  "┅": { type: "path", data: Shapes.THREE_DASHES_H, strokeWidth: 3 },
-  "┆": { type: "path", data: Shapes.THREE_DASHES_V, strokeWidth: 1 },
-  "┇": { type: "path", data: Shapes.THREE_DASHES_V, strokeWidth: 3 },
-  "┈": { type: "path", data: Shapes.FOUR_DASHES_H, strokeWidth: 1 },
-  "┉": { type: "path", data: Shapes.FOUR_DASHES_H, strokeWidth: 3 },
-  "┊": { type: "path", data: Shapes.FOUR_DASHES_V, strokeWidth: 1 },
-  "┋": { type: "path", data: Shapes.FOUR_DASHES_V, strokeWidth: 3 },
-  "╌": { type: "path", data: Shapes.TWO_DASHES_H, strokeWidth: 1 },
-  "╍": { type: "path", data: Shapes.TWO_DASHES_H, strokeWidth: 3 },
-  "╎": { type: "path", data: Shapes.TWO_DASHES_V, strokeWidth: 1 },
-  "╏": { type: "path", data: Shapes.TWO_DASHES_V, strokeWidth: 3 },
+  "┄": { type: "path", data: Shapes.THREE_DASHES_H, strokeWidth: 2 },
+  "┅": { type: "path", data: Shapes.THREE_DASHES_H, strokeWidth: 4 },
+  "┆": { type: "path", data: Shapes.THREE_DASHES_V, strokeWidth: 2 },
+  "┇": { type: "path", data: Shapes.THREE_DASHES_V, strokeWidth: 4 },
+  "┈": { type: "path", data: Shapes.FOUR_DASHES_H, strokeWidth: 2 },
+  "┉": { type: "path", data: Shapes.FOUR_DASHES_H, strokeWidth: 4 },
+  "┊": { type: "path", data: Shapes.FOUR_DASHES_V, strokeWidth: 2 },
+  "┋": { type: "path", data: Shapes.FOUR_DASHES_V, strokeWidth: 4 },
+  "╌": { type: "path", data: Shapes.TWO_DASHES_H, strokeWidth: 2 },
+  "╍": { type: "path", data: Shapes.TWO_DASHES_H, strokeWidth: 4 },
+  "╎": { type: "path", data: Shapes.TWO_DASHES_V, strokeWidth: 2 },
+  "╏": { type: "path", data: Shapes.TWO_DASHES_V, strokeWidth: 4 },
 
   // Corners
-  "┌": { type: "path", data: Shapes.RIGHT_TO_BOTTOM, strokeWidth: 1 },
-  "┏": { type: "path", data: Shapes.RIGHT_TO_BOTTOM, strokeWidth: 3 },
-  "┐": { type: "path", data: Shapes.LEFT_TO_BOTTOM, strokeWidth: 1 },
-  "┓": { type: "path", data: Shapes.LEFT_TO_BOTTOM, strokeWidth: 3 },
-  "└": { type: "path", data: Shapes.TOP_TO_RIGHT, strokeWidth: 1 },
-  "┗": { type: "path", data: Shapes.TOP_TO_RIGHT, strokeWidth: 3 },
-  "┘": { type: "path", data: Shapes.TOP_TO_LEFT, strokeWidth: 1 },
-  "┛": { type: "path", data: Shapes.TOP_TO_LEFT, strokeWidth: 3 },
+  "┌": { type: "path", data: Shapes.RIGHT_TO_BOTTOM, strokeWidth: 2 },
+  "┏": { type: "path", data: Shapes.RIGHT_TO_BOTTOM, strokeWidth: 4 },
+  "┐": { type: "path", data: Shapes.LEFT_TO_BOTTOM, strokeWidth: 2 },
+  "┓": { type: "path", data: Shapes.LEFT_TO_BOTTOM, strokeWidth: 4 },
+  "└": { type: "path", data: Shapes.TOP_TO_RIGHT, strokeWidth: 2 },
+  "┗": { type: "path", data: Shapes.TOP_TO_RIGHT, strokeWidth: 4 },
+  "┘": { type: "path", data: Shapes.TOP_TO_LEFT, strokeWidth: 2 },
+  "┛": { type: "path", data: Shapes.TOP_TO_LEFT, strokeWidth: 4 },
 
   // T-junctions
-  "├": { type: "path", data: Shapes.T_RIGHT, strokeWidth: 1 },
-  "┣": { type: "path", data: Shapes.T_RIGHT, strokeWidth: 3 },
-  "┤": { type: "path", data: Shapes.T_LEFT, strokeWidth: 1 },
-  "┫": { type: "path", data: Shapes.T_LEFT, strokeWidth: 3 },
-  "┬": { type: "path", data: Shapes.T_BOTTOM, strokeWidth: 1 },
-  "┳": { type: "path", data: Shapes.T_BOTTOM, strokeWidth: 3 },
-  "┴": { type: "path", data: Shapes.T_TOP, strokeWidth: 1 },
-  "┻": { type: "path", data: Shapes.T_TOP, strokeWidth: 3 },
+  "├": { type: "path", data: Shapes.T_RIGHT, strokeWidth: 2 },
+  "┣": { type: "path", data: Shapes.T_RIGHT, strokeWidth: 4 },
+  "┤": { type: "path", data: Shapes.T_LEFT, strokeWidth: 2 },
+  "┫": { type: "path", data: Shapes.T_LEFT, strokeWidth: 4 },
+  "┬": { type: "path", data: Shapes.T_BOTTOM, strokeWidth: 2 },
+  "┳": { type: "path", data: Shapes.T_BOTTOM, strokeWidth: 4 },
+  "┴": { type: "path", data: Shapes.T_TOP, strokeWidth: 2 },
+  "┻": { type: "path", data: Shapes.T_TOP, strokeWidth: 4 },
 
   // Cross
-  "┼": { type: "path", data: Shapes.CROSS, strokeWidth: 1 },
-  "╋": { type: "path", data: Shapes.CROSS, strokeWidth: 3 },
+  "┼": { type: "path", data: Shapes.CROSS, strokeWidth: 2 },
+  "╋": { type: "path", data: Shapes.CROSS, strokeWidth: 4 },
 
   // Half lines
-  "╴": { type: "path", data: Shapes.MIDDLE_TO_LEFT, strokeWidth: 1 },
-  "╵": { type: "path", data: Shapes.MIDDLE_TO_TOP, strokeWidth: 1 },
-  "╶": { type: "path", data: Shapes.MIDDLE_TO_RIGHT, strokeWidth: 1 },
-  "╷": { type: "path", data: Shapes.MIDDLE_TO_BOTTOM, strokeWidth: 1 },
-  "╸": { type: "path", data: Shapes.MIDDLE_TO_LEFT, strokeWidth: 3 },
-  "╹": { type: "path", data: Shapes.MIDDLE_TO_TOP, strokeWidth: 3 },
-  "╺": { type: "path", data: Shapes.MIDDLE_TO_RIGHT, strokeWidth: 3 },
-  "╻": { type: "path", data: Shapes.MIDDLE_TO_BOTTOM, strokeWidth: 3 },
+  "╴": { type: "path", data: Shapes.MIDDLE_TO_LEFT, strokeWidth: 2 },
+  "╵": { type: "path", data: Shapes.MIDDLE_TO_TOP, strokeWidth: 2 },
+  "╶": { type: "path", data: Shapes.MIDDLE_TO_RIGHT, strokeWidth: 2 },
+  "╷": { type: "path", data: Shapes.MIDDLE_TO_BOTTOM, strokeWidth: 2 },
+  "╸": { type: "path", data: Shapes.MIDDLE_TO_LEFT, strokeWidth: 4 },
+  "╹": { type: "path", data: Shapes.MIDDLE_TO_TOP, strokeWidth: 4 },
+  "╺": { type: "path", data: Shapes.MIDDLE_TO_RIGHT, strokeWidth: 4 },
+  "╻": { type: "path", data: Shapes.MIDDLE_TO_BOTTOM, strokeWidth: 4 },
 
   // Diagonals
-  "╱": { type: "path", data: "M1,0 L0,1", strokeWidth: 1 },
-  "╲": { type: "path", data: "M0,0 L1,1", strokeWidth: 1 },
-  "╳": { type: "path", data: "M1,0 L0,1 M0,0 L1,1", strokeWidth: 1 },
+  "╱": { type: "path", data: "M1,0 L0,1", strokeWidth: 2 },
+  "╲": { type: "path", data: "M0,0 L1,1", strokeWidth: 2 },
+  "╳": { type: "path", data: "M1,0 L0,1 M0,0 L1,1", strokeWidth: 2 },
 
   // Rounded corners
-  "╭": { type: "path", data: "M.5,1 L.5,.5 Q.5,.5,1,.5", strokeWidth: 1 },
-  "╮": { type: "path", data: "M.5,1 L.5,.5 Q.5,.5,0,.5", strokeWidth: 1 },
-  "╯": { type: "path", data: "M.5,0 L.5,.5 Q.5,.5,0,.5", strokeWidth: 1 },
-  "╰": { type: "path", data: "M.5,0 L.5,.5 Q.5,.5,1,.5", strokeWidth: 1 },
+  "╭": { type: "path", data: "M.5,1 L.5,.5 Q.5,.5,1,.5", strokeWidth: 2 },
+  "╮": { type: "path", data: "M.5,1 L.5,.5 Q.5,.5,0,.5", strokeWidth: 2 },
+  "╯": { type: "path", data: "M.5,0 L.5,.5 Q.5,.5,0,.5", strokeWidth: 2 },
+  "╰": { type: "path", data: "M.5,0 L.5,.5 Q.5,.5,1,.5", strokeWidth: 2 },
 
   // Double lines
-  "═": { type: "path", data: "M0,.35 L1,.35 M0,.65 L1,.65", strokeWidth: 1 },
-  "║": { type: "path", data: "M.35,0 L.35,1 M.65,0 L.65,1", strokeWidth: 1 },
-  "╔": { type: "path", data: "M1,.35 L.35,.35 L.35,1 M1,.65 L.65,.65 L.65,1", strokeWidth: 1 },
-  "╗": { type: "path", data: "M0,.35 L.65,.35 L.65,1 M0,.65 L.35,.65 L.35,1", strokeWidth: 1 },
-  "╚": { type: "path", data: "M1,.35 L.65,.35 L.65,0 M1,.65 L.35,.65 L.35,0", strokeWidth: 1 },
-  "╝": { type: "path", data: "M0,.35 L.35,.35 L.35,0 M0,.65 L.65,.65 L.65,0", strokeWidth: 1 },
-  "╠": { type: "path", data: "M.35,0 L.35,1 M1,.35 L.65,.35 L.65,0 M1,.65 L.65,.65 L.65,1", strokeWidth: 1 },
-  "╣": { type: "path", data: "M.65,0 L.65,1 M0,.35 L.35,.35 L.35,0 M0,.65 L.35,.65 L.35,1", strokeWidth: 1 },
-  "╦": { type: "path", data: "M0,.35 L1,.35 M0,.65 L.35,.65 L.35,1 M1,.65 L.65,.65 L.65,1", strokeWidth: 1 },
-  "╩": { type: "path", data: "M0,.65 L1,.65 M0,.35 L.35,.35 L.35,0 M1,.35 L.65,.35 L.65,0", strokeWidth: 1 },
+  "═": { type: "path", data: "M0,.35 L1,.35 M0,.65 L1,.65", strokeWidth: 2 },
+  "║": { type: "path", data: "M.35,0 L.35,1 M.65,0 L.65,1", strokeWidth: 2 },
+  "╔": { type: "path", data: "M1,.35 L.35,.35 L.35,1 M1,.65 L.65,.65 L.65,1", strokeWidth: 2 },
+  "╗": { type: "path", data: "M0,.35 L.65,.35 L.65,1 M0,.65 L.35,.65 L.35,1", strokeWidth: 2 },
+  "╚": { type: "path", data: "M1,.35 L.65,.35 L.65,0 M1,.65 L.35,.65 L.35,0", strokeWidth: 2 },
+  "╝": { type: "path", data: "M0,.35 L.35,.35 L.35,0 M0,.65 L.65,.65 L.65,0", strokeWidth: 2 },
+  "╠": { type: "path", data: "M.35,0 L.35,1 M1,.35 L.65,.35 L.65,0 M1,.65 L.65,.65 L.65,1", strokeWidth: 2 },
+  "╣": { type: "path", data: "M.65,0 L.65,1 M0,.35 L.35,.35 L.35,0 M0,.65 L.35,.65 L.35,1", strokeWidth: 2 },
+  "╦": { type: "path", data: "M0,.35 L1,.35 M0,.65 L.35,.65 L.35,1 M1,.65 L.65,.65 L.65,1", strokeWidth: 2 },
+  "╩": { type: "path", data: "M0,.65 L1,.65 M0,.35 L.35,.35 L.35,0 M1,.35 L.65,.35 L.65,0", strokeWidth: 2 },
   "╬": {
     type: "path",
     data: "M0,.35 L.35,.35 L.35,0 M.65,0 L.65,.35 L1,.35 M0,.65 L.35,.65 L.35,1 M.65,1 L.65,.65 L1,.65",
-    strokeWidth: 1,
+    strokeWidth: 2,
   },
 
   // Block elements (U+2580-U+259F)
@@ -203,8 +203,30 @@ export function getCustomGlyph(char: string): GlyphDefinition | undefined {
 }
 
 /**
+ * Snap a coordinate to the physical pixel grid for crisp line rendering.
+ * When ctx.scale(dpr, dpr) is active, we need to snap to (n + 0.5) / dpr
+ * in logical coordinates to hit physical pixel centers.
+ *
+ * @param value - The logical coordinate value
+ * @param max - Maximum value (for edge clamping)
+ * @param dpr - Device pixel ratio
+ */
+function snapToPixel(value: number, max: number, dpr: number): number {
+  if (value === 0) return 0
+  if (value === max) return max
+  // Convert to physical pixels, snap to center, convert back to logical
+  const physical = value * dpr
+  const snappedPhysical = Math.round(physical + 0.5) - 0.5
+  return snappedPhysical / dpr
+}
+
+/**
  * Parse an SVG path string and draw it to a canvas context
  * Path is in normalized coordinates (0-1), scaled to cellWidth x cellHeight
+ *
+ * @param devicePixelRatio - Used for pixel snapping on high-DPI displays.
+ *                           Note: lineWidth is NOT scaled by DPR here because
+ *                           the canvas context is already scaled via ctx.scale(dpr, dpr)
  */
 export function drawPath(
   ctx: CanvasRenderingContext2D,
@@ -214,7 +236,8 @@ export function drawPath(
   cellWidth: number,
   cellHeight: number,
   strokeWidth: number,
-  color: string
+  color: string,
+  devicePixelRatio: number = 1
 ): void {
   ctx.save()
   ctx.strokeStyle = color
@@ -237,27 +260,33 @@ export function drawPath(
 
     switch (type) {
       case "M": // Move to
-        ctx.moveTo(x + args[0] * cellWidth, y + args[1] * cellHeight)
+        ctx.moveTo(
+          x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio)
+        )
         break
       case "L": // Line to
-        ctx.lineTo(x + args[0] * cellWidth, y + args[1] * cellHeight)
+        ctx.lineTo(
+          x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio)
+        )
         break
       case "Q": // Quadratic curve
         ctx.quadraticCurveTo(
-          x + args[0] * cellWidth,
-          y + args[1] * cellHeight,
-          x + args[2] * cellWidth,
-          y + args[3] * cellHeight
+          x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio),
+          x + snapToPixel(args[2] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[3] * cellHeight, cellHeight, devicePixelRatio)
         )
         break
       case "C": // Cubic curve
         ctx.bezierCurveTo(
-          x + args[0] * cellWidth,
-          y + args[1] * cellHeight,
-          x + args[2] * cellWidth,
-          y + args[3] * cellHeight,
-          x + args[4] * cellWidth,
-          y + args[5] * cellHeight
+          x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio),
+          x + snapToPixel(args[2] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[3] * cellHeight, cellHeight, devicePixelRatio),
+          x + snapToPixel(args[4] * cellWidth, cellWidth, devicePixelRatio),
+          y + snapToPixel(args[5] * cellHeight, cellHeight, devicePixelRatio)
         )
         break
       case "Z": // Close path

@@ -127,17 +127,17 @@ function OverviewTab() {
         {/* Right column - Info boxes */}
         <box flexDirection="column" flexGrow={1} gap={1}>
           <box border borderStyle="single" borderColor={theme.success} padding={1} backgroundColor="#0d2818">
-            <text fg={theme.success}>✓ </text>
+            <text fg={theme.success}>[OK] </text>
             <text fg={theme.fg}>Server running on port 3001</text>
           </box>
 
           <box border borderStyle="single" borderColor={theme.warning} padding={1} backgroundColor="#2d2206">
-            <text fg={theme.warning}>⚠ </text>
+            <text fg={theme.warning}>[!!] </text>
             <text fg={theme.fg}>3 pending updates available</text>
           </box>
 
           <box border borderStyle="single" borderColor={theme.info} padding={1} backgroundColor="#0d1f3c">
-            <text fg={theme.info}>ℹ </text>
+            <text fg={theme.info}>[i] </text>
             <text fg={theme.fg}>Press number keys to switch tabs</text>
           </box>
         </box>

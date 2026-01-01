@@ -6,7 +6,10 @@ connectTerminal({
   maxCols: 120,
   maxRows: 40,
   useCanvas: true, // Use canvas renderer for pixel-perfect box-drawing
-  fontFamily: "Consolas, Menlo, Monaco, 'Courier New', monospace",
+  fontFamily: "'JetBrains Mono', Menlo, Consolas, monospace",
   fontSize: 14,
-  lineHeight: 1.6, // Taller lines for better readability
+  lineHeight: 1.4,
+  fontWeight: 500, // Heavier than normal (400) for better readability
+  fontWeightBold: 700,
+  // letterSpacing: 2, // Wider character cells
 })
