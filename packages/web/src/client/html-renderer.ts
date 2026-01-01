@@ -90,10 +90,9 @@ export interface TerminalRendererOptions {
   maxRows?: number
   fontFamily?: string
   fontSize?: number
+  /** If not provided, auto-detects from terminal content */
   backgroundColor?: string
   textColor?: string
-  /** Auto-detect and set document.body background from terminal content */
-  autoBackground?: boolean
 }
 
 export class TerminalRenderer {
@@ -106,24 +105,24 @@ export class TerminalRenderer {
   private fontSize: number
   private cols: number = 80
   private rows: number = 24
-  private backgroundSet: boolean = false
-  private autoBackground: boolean
+  private fixedBackground: string | null
 
   constructor(options: TerminalRendererOptions) {
     this.container = options.container
     this.maxCols = options.maxCols ?? 200
     this.maxRows = options.maxRows ?? 200
     this.fontSize = options.fontSize ?? 14
-    this.autoBackground = options.autoBackground ?? true
+    this.fixedBackground = options.backgroundColor ?? null
 
     // Create terminal container
+    // Use provided background or transparent (will auto-detect on first render)
     this.terminalEl = document.createElement("div")
     this.terminalEl.className = "opentui-terminal"
     this.terminalEl.style.cssText = `
       font-family: ${options.fontFamily ?? "Monaco, Menlo, 'Ubuntu Mono', Consolas, monospace"};
       font-size: ${this.fontSize}px;
       line-height: 1.2;
-      background-color: ${options.backgroundColor ?? "#1a1a1a"};
+      background-color: ${this.fixedBackground ?? "transparent"};
       color: ${options.textColor ?? "#ffffff"};
       overflow: hidden;
       position: relative;
@@ -181,11 +180,12 @@ export class TerminalRenderer {
     this.cols = data.cols
     this.rows = data.rows
 
-    // Set page background from first frame
-    if (this.autoBackground && !this.backgroundSet) {
+    // Auto-detect background from terminal content (only if not user-provided)
+    if (!this.fixedBackground) {
       const bg = getMostCommonBackground(data)
       document.body.style.backgroundColor = bg
-      this.backgroundSet = true
+      this.terminalEl.style.backgroundColor = bg
+      this.fixedBackground = bg // only detect once
     }
 
     // Clear existing lines

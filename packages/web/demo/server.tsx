@@ -1,5 +1,5 @@
 import { opentuiWebSocket } from "../src/index"
-import html from './index.html'
+import html from "./index.html"
 import { createRoot, useKeyboard } from "@opentui/react"
 import { useState, useEffect } from "react"
 
@@ -73,14 +73,7 @@ function CounterApp() {
         <text fg="#666"> {fps} fps</text>
       </box>
 
-      <box
-        borderStyle="single"
-        borderColor="#888"
-        padding={1}
-        flexDirection="column"
-        alignItems="center"
-        width={40}
-      >
+      <box borderStyle="single" borderColor="#888" padding={1} flexDirection="column" alignItems="center" width={40}>
         <text>Counter Value:</text>
         <text bold fg={count >= 0 ? "#22c55e" : "#ef4444"}>
           {count}
@@ -93,9 +86,9 @@ function CounterApp() {
 
       <box marginTop={1} flexDirection="column">
         <text fg="#666">Controls:</text>
-        <text fg="#666">  +/-/↑/↓ : Increment / Decrement</text>
-        <text fg="#666">  r     : Reset</text>
-        <text fg="#666">  q     : Quit server</text>
+        <text fg="#666"> +/-/↑/↓ : Increment / Decrement</text>
+        <text fg="#666"> r : Reset</text>
+        <text fg="#666"> q : Quit server</text>
       </box>
     </box>
   )
@@ -158,12 +151,6 @@ const server = Bun.serve({
 
   websocket: ws.websocket,
 })
-
-console.log(`
-╔══════════════════════════════════════════════════════════════╗
-║                   OpenTUI Web Demo                           ║
-╠══════════════════════════════════════════════════════════════╣
-║  Local:   http://localhost:${server.port}                          ║
-║  Network: http://192.168.1.2:${server.port}                        ║
-╚══════════════════════════════════════════════════════════════╝
+console.log(`OpenTUI Web Demo running on:
+  Local:   http://localhost:${server.port}
 `)
