@@ -5,8 +5,9 @@ export type { VTermData, VTermLine, VTermSpan }
 export interface Modifiers {
   shift?: boolean
   ctrl?: boolean
-  alt?: boolean
-  meta?: boolean
+  meta?: boolean // Alt/Option key (browser altKey)
+  super?: boolean // Cmd/Windows key (browser metaKey)
+  hyper?: boolean
 }
 
 // Client -> Server messages

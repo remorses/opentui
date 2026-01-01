@@ -96,6 +96,12 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       return
     }
 
+    // Ignore modifier-only key presses - they only affect other keys
+    const modifierOnlyKeys = ["Alt", "Control", "Shift", "Meta", "CapsLock", "NumLock", "ScrollLock"]
+    if (modifierOnlyKeys.includes(e.key)) {
+      return
+    }
+
     // Let browser handle F-keys (F1-F12 for devtools etc) and meta shortcuts
     const isFKey = e.key.startsWith("F") && e.key.length <= 3 && !isNaN(Number(e.key.slice(1)))
     if (isFKey || e.metaKey) {
@@ -104,14 +110,17 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
     e.preventDefault()
 
+    // Map browser modifiers to terminal modifiers:
+    // Browser altKey (Alt/Option) → Terminal meta (bit 2)
+    // Browser metaKey (Cmd/Win) → Terminal super (bit 8)
     send({
       type: "key",
       key: e.key,
       modifiers: {
         shift: e.shiftKey,
         ctrl: e.ctrlKey,
-        alt: e.altKey,
-        meta: e.metaKey,
+        meta: e.altKey, // Alt/Option → meta
+        super: e.metaKey, // Cmd/Win → super
       },
     })
   }

@@ -143,23 +143,21 @@ function OverviewTab() {
         </box>
       </box>
 
-      {/* Input area */}
+      {/* Text editor area */}
       <box
         marginTop={1}
         border
         borderStyle="rounded"
         borderColor={theme.accent}
         padding={1}
-        title="Command Input"
+        title="Text Editor"
         titleAlignment="left"
-        flexDirection="row"
+        height={5}
       >
-        <text fg={theme.accent}>❯ </text>
-        <input
+        <textarea
           focused
-          placeholder="Type something..."
-          onInput={setInputValue}
-          style={{ flexGrow: 1, focusedBackgroundColor: theme.bg }}
+          initialValue="hello world test"
+          style={{ flexGrow: 1, backgroundColor: theme.bg }}
         />
       </box>
 
