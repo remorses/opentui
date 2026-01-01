@@ -1,4 +1,5 @@
 import { opentuiWebSocket } from "../src/index"
+import html from './index.html'
 import { createRoot, useKeyboard } from "@opentui/react"
 import { useState, useEffect } from "react"
 
@@ -17,18 +18,18 @@ function CounterApp() {
   const [message, setMessage] = useState("Press +/-/arrows, r to reset")
   const [spinnerIdx, setSpinnerIdx] = useState(0)
   const [fps, setFps] = useState(0)
-  const spinner = SPINNERS.line
+  const spinner = SPINNERS.circle
 
   // Spinner animation at reasonable speed, FPS counter separate
   useEffect(() => {
     let frameCount = 0
     let lastFpsUpdate = Date.now()
-    
+
     // Spinner updates at 100ms (10 fps) - visually reasonable
     const spinnerInterval = setInterval(() => {
       setSpinnerIdx((i) => (i + 1) % spinner.length)
     }, 100)
-    
+
     // FPS counter updates every 16ms to measure actual render rate
     const fpsInterval = setInterval(() => {
       frameCount++
@@ -39,7 +40,7 @@ function CounterApp() {
         lastFpsUpdate = now
       }
     }, 16)
-    
+
     return () => {
       clearInterval(spinnerInterval)
       clearInterval(fpsInterval)
@@ -48,7 +49,7 @@ function CounterApp() {
 
   useKeyboard((e) => {
     console.log(`[key] name="${e.name}" char="${e.char}"`)
-    
+
     const key = e.name || e.char
     if (key === "+" || key === "=" || key === "up") {
       setCount((c) => c + 1)
@@ -114,10 +115,10 @@ const ws = opentuiWebSocket({
   frameRate: 30,
   onConnection: (session) => {
     console.log(`New session: ${session.id}`)
-    
+
     const root = createRoot(session.renderer)
     root.render(<CounterApp />)
-    
+
     return () => {
       console.log(`Session closed: ${session.id}`)
       root.unmount()
@@ -129,17 +130,15 @@ const ws = opentuiWebSocket({
 const server = Bun.serve({
   port: 3001,
   hostname: "0.0.0.0",
-  
+
   // Serve static files from demo directory
   static: {
-    "/": new Response(await Bun.file(import.meta.dir + "/index.html").bytes(), {
-      headers: { "Content-Type": "text/html" },
-    }),
+    "/": html,
     "/client.ts": new Response(clientJs, {
       headers: { "Content-Type": "application/javascript" },
     }),
   },
-  
+
   fetch(req, server) {
     const url = new URL(req.url)
 
@@ -153,10 +152,10 @@ const server = Bun.serve({
     if (url.pathname === "/health") {
       return Response.json({ status: "ok", sessions: ws.sessionManager.getSessionCount() })
     }
-    
+
     return new Response("Not found", { status: 404 })
   },
-  
+
   websocket: ws.websocket,
 })
 
