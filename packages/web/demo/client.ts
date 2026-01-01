@@ -5,4 +5,8 @@ connectTerminal({
   container: "#terminal",
   maxCols: 120,
   maxRows: 40,
+  useCanvas: true, // Use canvas renderer for pixel-perfect box-drawing
+  fontFamily: "'JetBrainsMono NFM', 'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace",
+  fontSize: 14,
+  lineHeight: 1.6, // Taller lines for better readability
 })

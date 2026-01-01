@@ -1,9 +1,14 @@
 import type { ClientMessage, ServerMessage, VTermData, LineDiff } from "../shared/types"
 import { TerminalRenderer, type TerminalRendererOptions } from "./html-renderer"
+import { CanvasRenderer, type CanvasRendererOptions } from "./canvas-renderer"
 
-export interface ConnectOptions extends Omit<TerminalRendererOptions, "container"> {
+type BaseRendererOptions = Omit<TerminalRendererOptions, "container"> & Omit<CanvasRendererOptions, "container">
+
+export interface ConnectOptions extends BaseRendererOptions {
   url: string
   container: HTMLElement | string
+  /** Use canvas renderer with custom glyph support for pixel-perfect box-drawing (default: false) */
+  useCanvas?: boolean
   onConnect?: () => void
   onDisconnect?: () => void
   onError?: (error: Error) => void
@@ -16,7 +21,7 @@ export interface TerminalConnection {
 }
 
 export function connectTerminal(options: ConnectOptions): TerminalConnection {
-  const { url, container: containerOption, onConnect, onDisconnect, onError, ...rendererOptions } = options
+  const { url, container: containerOption, useCanvas, onConnect, onDisconnect, onError, ...rendererOptions } = options
 
   // Resolve container
   const container =
@@ -37,13 +42,21 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
 
   // Create renderer with resize callback
-  const renderer = new TerminalRenderer({
-    container,
-    ...rendererOptions,
-    onResize: (size) => {
-      send({ type: "resize", cols: size.cols, rows: size.rows })
-    },
-  })
+  const renderer = useCanvas
+    ? new CanvasRenderer({
+        container,
+        ...rendererOptions,
+        onResize: (size) => {
+          send({ type: "resize", cols: size.cols, rows: size.rows })
+        },
+      })
+    : new TerminalRenderer({
+        container,
+        ...rendererOptions,
+        onResize: (size) => {
+          send({ type: "resize", cols: size.cols, rows: size.rows })
+        },
+      })
 
   // Get initial size
   const { cols, rows } = renderer.getSize()
@@ -140,8 +153,10 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   // Setup mouse input
   const getTerminalCoords = (e: MouseEvent): { x: number; y: number } => {
     const rect = container.getBoundingClientRect()
-    const charWidth = renderer["fontSize"] * 0.6
-    const lineHeight = renderer["fontSize"] * 1.2
+    // Get cell dimensions from renderer (works for both HTML and Canvas renderers)
+    const fontSize = (renderer as any).fontSize ?? 14
+    const charWidth = (renderer as any).metrics?.charWidth ?? fontSize * 0.6
+    const lineHeight = (renderer as any).metrics?.charHeight ?? fontSize * 1.2
 
     const x = Math.floor((e.clientX - rect.left) / charWidth)
     const y = Math.floor((e.clientY - rect.top) / lineHeight)
