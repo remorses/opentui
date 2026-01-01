@@ -51,6 +51,8 @@ interface InternalSession {
   lastLines: VTermLine[]
   cleanup?: () => void
   dirty: boolean
+  rendering: boolean
+  pendingRender: boolean
 }
 
 export class SessionManager {
@@ -82,8 +84,7 @@ export class SessionManager {
 
     const testRenderer = await createTestRenderer({ width: cols, height: rows })
 
-    // Start the renderer so it can receive keyboard/mouse input
-    testRenderer.renderer.start()
+    // Don't call start() - we control rendering via renderOnce() calls
 
     const session: InternalSession = {
       id,
@@ -94,6 +95,8 @@ export class SessionManager {
       query,
       lastLines: [],
       dirty: true,
+      rendering: false,
+      pendingRender: false,
     }
 
     this.sessions.set(id, session)
@@ -133,8 +136,6 @@ export class SessionManager {
 
     const { mockInput, mockMouse, resize } = session.testRenderer
 
-    Bun.write(Bun.stderr, `[session] ${sessionId} received: ${JSON.stringify(message)}\n`)
-
     switch (message.type) {
       case "key":
         // Map browser key names to KeyCodes format
@@ -164,6 +165,8 @@ export class SessionManager {
             break
         }
         session.dirty = true
+        // Trigger immediate render after mouse input
+        this.tickSession(session)
         break
       }
 
@@ -175,6 +178,8 @@ export class SessionManager {
         session.rows = newRows
         session.dirty = true
         session.lastLines = [] // Force full redraw on resize
+        // Trigger immediate render after resize
+        this.tickSession(session)
         break
 
       case "ping":
@@ -215,8 +220,15 @@ export class SessionManager {
   }
 
   private async tickSession(session: InternalSession) {
+    // If already rendering, mark that we need another render
+    if (session.rendering) {
+      session.pendingRender = true
+      return
+    }
+    session.rendering = true
+
     try {
-      // Always render to process any pending updates
+      // Render to process any pending updates
       await session.testRenderer.renderOnce()
 
       const data = session.testRenderer.captureSpans()
@@ -246,6 +258,13 @@ export class SessionManager {
     } catch (error) {
       console.error(`Error in session ${session.id}:`, error)
       this.sendMessage(session, { type: "error", message: String(error) })
+    } finally {
+      session.rendering = false
+      // If a render was requested while we were rendering, do it now
+      if (session.pendingRender) {
+        session.pendingRender = false
+        this.tickSession(session)
+      }
     }
   }
 
