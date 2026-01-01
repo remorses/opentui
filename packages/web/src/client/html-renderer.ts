@@ -1,6 +1,40 @@
 import type { VTermData, VTermLine, VTermSpan, LineDiff } from "../shared/types"
 
 const DEFAULT_BG = "#1e1e1e"
+const DEFAULT_FONT_SIZE = 14
+const DEFAULT_MAX_COLS = 200
+const DEFAULT_MAX_ROWS = 200
+
+/** Font metrics for calculating terminal dimensions */
+export interface TerminalMetrics {
+  charWidth: number
+  lineHeight: number
+}
+
+/** Get font metrics for a given font size */
+export function getTerminalMetrics(options?: { fontSize?: number }): TerminalMetrics {
+  const fontSize = options?.fontSize ?? DEFAULT_FONT_SIZE
+  return {
+    charWidth: fontSize * 0.6,
+    lineHeight: fontSize * 1.2,
+  }
+}
+
+/** Calculate cols/rows that fit in given pixel dimensions */
+export function getTerminalSize(options: {
+  width: number
+  height: number
+  fontSize?: number
+  maxCols?: number
+  maxRows?: number
+}): { cols: number; rows: number } {
+  const { width, height, fontSize = DEFAULT_FONT_SIZE, maxCols = DEFAULT_MAX_COLS, maxRows = DEFAULT_MAX_ROWS } = options
+  const metrics = getTerminalMetrics({ fontSize })
+  return {
+    cols: Math.min(Math.floor(width / metrics.charWidth), maxCols),
+    rows: Math.min(Math.floor(height / metrics.lineHeight), maxRows),
+  }
+}
 
 function getMostCommonBackground(data: VTermData): string {
   const bgCounts = new Map<string, number>()
@@ -93,6 +127,8 @@ export interface TerminalRendererOptions {
   /** If not provided, auto-detects from terminal content */
   backgroundColor?: string
   textColor?: string
+  /** Called when terminal size changes due to window resize */
+  onResize?: (size: { cols: number; rows: number }) => void
 }
 
 export class TerminalRenderer {
@@ -106,29 +142,27 @@ export class TerminalRenderer {
   private cols: number = 80
   private rows: number = 24
   private fixedBackground: string | null
+  private fontFamily: string
+  private onResize?: (size: { cols: number; rows: number }) => void
+  private resizeTimeout: ReturnType<typeof setTimeout> | null = null
+  private boundHandleResize: () => void
 
   constructor(options: TerminalRendererOptions) {
     this.container = options.container
-    this.maxCols = options.maxCols ?? 200
-    this.maxRows = options.maxRows ?? 200
-    this.fontSize = options.fontSize ?? 14
+    this.maxCols = options.maxCols ?? DEFAULT_MAX_COLS
+    this.maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
+    this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
     this.fixedBackground = options.backgroundColor ?? null
+    this.fontFamily = options.fontFamily ?? "Monaco, Menlo, 'Ubuntu Mono', Consolas, monospace"
+    this.onResize = options.onResize
 
-    // Create terminal container
-    // Use provided background or transparent (will auto-detect on first render)
+    // Calculate initial size based on window dimensions
+    this.recalculateSize()
+
+    // Create terminal container with computed size
     this.terminalEl = document.createElement("div")
     this.terminalEl.className = "opentui-terminal"
-    this.terminalEl.style.cssText = `
-      font-family: ${options.fontFamily ?? "Monaco, Menlo, 'Ubuntu Mono', Consolas, monospace"};
-      font-size: ${this.fontSize}px;
-      line-height: 1.2;
-      background-color: ${this.fixedBackground ?? "transparent"};
-      color: ${options.textColor ?? "#ffffff"};
-      overflow: hidden;
-      position: relative;
-      width: 100%;
-      height: 100%;
-    `
+    this.updateTerminalStyles()
 
     // Create cursor element
     this.cursorEl = document.createElement("div")
@@ -147,6 +181,60 @@ export class TerminalRenderer {
 
     // Add global styles
     this.injectStyles()
+
+    // Setup resize listener with 10ms debounce
+    this.boundHandleResize = this.handleResize.bind(this)
+    window.addEventListener("resize", this.boundHandleResize)
+  }
+
+  private recalculateSize() {
+    const metrics = getTerminalMetrics({ fontSize: this.fontSize })
+
+    // Calculate what fits on the page
+    const pageCols = Math.floor(window.innerWidth / metrics.charWidth)
+    const pageRows = Math.floor(window.innerHeight / metrics.lineHeight)
+
+    // Use minimum of user's max and what fits on page
+    this.cols = Math.min(this.maxCols, pageCols)
+    this.rows = Math.min(this.maxRows, pageRows)
+  }
+
+  private updateTerminalStyles() {
+    const metrics = getTerminalMetrics({ fontSize: this.fontSize })
+    const width = this.cols * metrics.charWidth
+    const height = this.rows * metrics.lineHeight
+    const maxWidth = this.maxCols * metrics.charWidth
+    const maxHeight = this.maxRows * metrics.lineHeight
+
+    this.terminalEl.style.cssText = `
+      font-family: ${this.fontFamily};
+      font-size: ${this.fontSize}px;
+      line-height: 1.2;
+      background-color: ${this.fixedBackground ?? "transparent"};
+      color: #ffffff;
+      overflow: hidden;
+      position: relative;
+      width: ${width}px;
+      height: ${height}px;
+      max-width: ${maxWidth}px;
+      max-height: ${maxHeight}px;
+    `
+  }
+
+  private handleResize() {
+    if (this.resizeTimeout) {
+      clearTimeout(this.resizeTimeout)
+    }
+    this.resizeTimeout = setTimeout(() => {
+      const oldCols = this.cols
+      const oldRows = this.rows
+      this.recalculateSize()
+
+      if (oldCols !== this.cols || oldRows !== this.rows) {
+        this.updateTerminalStyles()
+        this.onResize?.({ cols: this.cols, rows: this.rows })
+      }
+    }, 10)
   }
 
   private injectStyles() {
@@ -242,16 +330,14 @@ export class TerminalRenderer {
   }
 
   getSize(): { cols: number; rows: number } {
-    const charWidth = this.fontSize * 0.6
-    const lineHeight = this.fontSize * 1.2
-
-    const cols = Math.min(Math.floor(this.container.clientWidth / charWidth), this.maxCols)
-    const rows = Math.min(Math.floor(this.container.clientHeight / lineHeight), this.maxRows)
-
-    return { cols, rows }
+    return { cols: this.cols, rows: this.rows }
   }
 
   destroy() {
+    window.removeEventListener("resize", this.boundHandleResize)
+    if (this.resizeTimeout) {
+      clearTimeout(this.resizeTimeout)
+    }
     this.container.removeChild(this.terminalEl)
   }
 }

@@ -26,10 +26,23 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     throw new Error(`Container not found: ${containerOption}`)
   }
 
-  // Create renderer
+  // WebSocket reference (set after creation)
+  let ws: WebSocket
+
+  // Send helper
+  function send(message: ClientMessage) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message))
+    }
+  }
+
+  // Create renderer with resize callback
   const renderer = new TerminalRenderer({
     container,
     ...rendererOptions,
+    onResize: (size) => {
+      send({ type: "resize", cols: size.cols, rows: size.rows })
+    },
   })
 
   // Get initial size
@@ -41,7 +54,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   wsUrl.searchParams.set("rows", String(rows))
 
 
-  const ws = new WebSocket(wsUrl.toString())
+  ws = new WebSocket(wsUrl.toString())
 
   // Handle WebSocket events
   ws.onopen = () => {
@@ -185,20 +198,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
   container.focus()
 
-  // Send helper
-  function send(message: ClientMessage) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message))
-    }
-  }
-
-  // Resize handler
-  const resizeObserver = new ResizeObserver(() => {
-    const { cols, rows } = renderer.getSize()
-    send({ type: "resize", cols, rows })
-  })
-  resizeObserver.observe(container)
-
   return {
     send,
     disconnect: () => {
@@ -207,7 +206,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       container.removeEventListener("mousedown", handleMouseDown)
       container.removeEventListener("mouseup", handleMouseUp)
       container.removeEventListener("wheel", handleWheel)
-      resizeObserver.disconnect()
       renderer.destroy()
     },
     resize: () => {
