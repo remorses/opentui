@@ -181,7 +181,11 @@ export class SessionCore {
     }
 
     if (this.cleanup) {
-      this.cleanup()
+      try {
+        this.cleanup()
+      } catch (error) {
+        console.error(`Error in cleanup callback for session ${this.id}:`, error)
+      }
     }
 
     this.testRenderer.renderer.destroy()
