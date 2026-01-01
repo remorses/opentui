@@ -138,11 +138,30 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     send({ type: "mouse", action: "up", x, y, button: e.button })
   }
 
+  // Throttle wheel events and batch scroll amount
+  let wheelAccumulator = 0
+  let wheelTimeout: ReturnType<typeof setTimeout> | null = null
+  
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault()
-    const { x, y } = getTerminalCoords(e)
-    // 4 = scroll up, 5 = scroll down (following xterm convention)
-    send({ type: "mouse", action: "scroll", x, y, button: e.deltaY < 0 ? 4 : 5 })
+    
+    // Accumulate scroll delta
+    wheelAccumulator += e.deltaY
+    
+    // Process immediately if we have enough delta (40px = ~1 line)
+    const linesToScroll = Math.trunc(wheelAccumulator / 40)
+    if (linesToScroll !== 0) {
+      const { x, y } = getTerminalCoords(e)
+      const direction = linesToScroll > 0 ? 5 : 4 // 5 = down, 4 = up
+      const count = Math.abs(linesToScroll)
+      
+      // Send multiple scroll events for faster scrolling
+      for (let i = 0; i < Math.min(count, 5); i++) {
+        send({ type: "mouse", action: "scroll", x, y, button: direction })
+      }
+      
+      wheelAccumulator = wheelAccumulator % 40 // Keep remainder
+    }
   }
 
   // Attach event listeners
