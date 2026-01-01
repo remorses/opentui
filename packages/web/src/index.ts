@@ -15,5 +15,16 @@ export type {
   SessionInfo,
 } from "./shared/types"
 
+// Shared session core (for tunnel package)
+export { SessionCore, type SessionCoreOptions } from "./shared/session-core"
+
+// WebSocket abstraction
+export { 
+  type WebSocketLike, 
+  WebSocketState,
+  ServerWebSocketAdapter,
+  ClientWebSocketAdapter,
+} from "./shared/websocket"
+
 // Utilities
 export { diffLines, applyDiff } from "./shared/span-differ"
