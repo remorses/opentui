@@ -391,7 +391,7 @@ const clientJs = await clientBuild.outputs[0].text()
 // Create WebSocket handler
 const ws = opentuiWebSocket({
   maxCols: 120,
-  maxRows: 120,
+  maxRows: 40,
   frameRate: 60,
   onConnection: (session) => {
     console.log(`New session: ${session.id}`)

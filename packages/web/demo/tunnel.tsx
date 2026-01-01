@@ -367,6 +367,11 @@ function App() {
 console.log("Starting tunnel connection...")
 
 const tunnel = await connectTunnel({
+  maxCols: 120,
+  maxRows: 40,
+  cols: 80,
+  rows: 24,
+  frameRate: 60,
   onConnection: (session) => {
     console.log(`Browser connected to session: ${session.id}`)
 
