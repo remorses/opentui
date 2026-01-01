@@ -28,6 +28,13 @@ export default {
       })
     }
 
+    // Serve client assets at /s/*.js (bundled JS files)
+    if (url.pathname.startsWith("/s/") && url.pathname.endsWith(".js")) {
+      const filename = url.pathname.split("/").pop()
+      const assetUrl = new URL(`/${filename}`, request.url)
+      return env.ASSETS.fetch(assetUrl)
+    }
+
     // Serve client HTML at /s/{tunnelId}
     if (url.pathname.startsWith("/s/")) {
       const tunnelId = url.pathname.slice(3)
