@@ -69,6 +69,7 @@ export async function createTestRenderer(options: TestRendererOptions): Promise<
         cols: currentBuffer.width,
         rows: currentBuffer.height,
         cursor: [cursorState.x, cursorState.y] as [number, number],
+        cursorVisible: cursorState.visible,
         offset: 0,
         totalLines: lines.length,
         lines,

@@ -49,6 +49,7 @@ interface InternalSession {
   rows: number
   query: URLSearchParams
   lastLines: VTermLine[]
+  lastCursor: { x: number; y: number; visible: boolean } | null
   cleanup?: () => void
   dirty: boolean
   rendering: boolean
@@ -94,6 +95,7 @@ export class SessionManager {
       rows,
       query,
       lastLines: [],
+      lastCursor: null,
       dirty: true,
       rendering: false,
       pendingRender: false,
@@ -233,10 +235,13 @@ export class SessionManager {
 
       const data = session.testRenderer.captureSpans()
 
+      const cursor = { x: data.cursor[0], y: data.cursor[1], visible: data.cursorVisible }
+
       // Check if this is first frame or resize (need full update)
       if (session.lastLines.length === 0) {
         this.sendMessage(session, { type: "full", data })
         session.lastLines = data.lines
+        session.lastCursor = cursor
         session.dirty = false
         return
       }
@@ -252,6 +257,13 @@ export class SessionManager {
           this.sendMessage(session, { type: "diff", changes })
         }
         session.lastLines = data.lines
+      }
+
+      // Send cursor update if changed
+      const lastCursor = session.lastCursor
+      if (!lastCursor || lastCursor.x !== cursor.x || lastCursor.y !== cursor.y || lastCursor.visible !== cursor.visible) {
+        this.sendMessage(session, { type: "cursor", ...cursor })
+        session.lastCursor = cursor
       }
 
       session.dirty = false

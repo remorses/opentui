@@ -205,7 +205,7 @@ export class TerminalRenderer {
     }
 
     // Update cursor
-    this.updateCursor(data.cursor[0], data.cursor[1], true)
+    this.updateCursor(data.cursor[0], data.cursor[1], data.cursorVisible)
   }
 
   applyDiff(changes: LineDiff[]) {

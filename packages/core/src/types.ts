@@ -136,6 +136,7 @@ export interface VTermData {
   cols: number
   rows: number
   cursor: [number, number]
+  cursorVisible: boolean
   offset: number
   totalLines: number
   lines: VTermLine[]
