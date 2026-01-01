@@ -32,7 +32,14 @@ export default {
     if (url.pathname.startsWith("/s/") && url.pathname.endsWith(".js")) {
       const filename = url.pathname.split("/").pop()
       const assetUrl = new URL(`/${filename}`, request.url)
-      return env.ASSETS.fetch(assetUrl)
+      const response = await env.ASSETS.fetch(assetUrl)
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          "Content-Type": "application/javascript",
+          "Cache-Control": "no-cache",
+        },
+      })
     }
 
     // Serve client HTML at /s/{tunnelId}
