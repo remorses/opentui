@@ -25,7 +25,8 @@
     "deploy": "bun run build && wrangler deploy"
   },
   "dependencies": {
-    "@opentui/web": "workspace:*"
+    "@opentui/web": "workspace:*",
+    "ulid": "^3.0.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250712.0",

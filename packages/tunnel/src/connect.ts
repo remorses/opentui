@@ -1,4 +1,5 @@
 import { SessionCore, type Session, type ClientMessage, type ServerMessage } from "@opentui/web"
+import { ulid } from "ulid"
 
 const DEFAULT_TUNNEL_URL = "wss://opentui.net/_tunnel"
 const DEFAULT_HTML_URL = "https://opentui.net"
@@ -96,7 +97,7 @@ export interface TunnelConnection {
  */
 export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection> {
   const {
-    tunnelId = crypto.randomUUID(),
+    tunnelId = ulid().toLowerCase(),
     tunnelUrl = DEFAULT_TUNNEL_URL,
     htmlUrl = DEFAULT_HTML_URL,
     onConnection,
