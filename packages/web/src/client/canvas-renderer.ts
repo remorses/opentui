@@ -17,6 +17,49 @@ const DEFAULT_LINE_HEIGHT = 1.2
 const DEFAULT_MAX_COLS = 200
 const DEFAULT_MAX_ROWS = 200
 
+/**
+ * Check which font from the font-family string is actually being rendered.
+ * Uses canvas width comparison - more reliable than document.fonts.check()
+ * which can return true for fonts that aren't actually installed.
+ */
+function checkFontAvailability(
+  fontFamily: string,
+  fontSize: number
+): { available: string | null; requested: string; usingFallback: boolean } {
+  const canvas = document.createElement("canvas")
+  const ctx = canvas.getContext("2d")!
+  // Use characters with varying widths across different fonts
+  const testString = "mmmmmmmmmmlli"
+
+  // Parse font family string into individual fonts
+  const fonts = fontFamily.split(",").map((f) => f.trim().replace(/^['"]|['"]$/g, ""))
+  const requested = fonts[0]
+
+  // Get baseline width with generic monospace
+  ctx.font = `${fontSize}px monospace`
+  const fallbackWidth = ctx.measureText(testString).width
+
+  // Test each font individually (not with fallback chain)
+  for (const font of fonts) {
+    if (font === "monospace" || font === "sans-serif" || font === "serif") continue
+
+    // Test font alone - if it's not available, browser uses default (not our fallback chain)
+    ctx.font = `${fontSize}px "${font}"`
+    const fontWidth = ctx.measureText(testString).width
+
+    // Also test with explicit fallback to compare
+    ctx.font = `${fontSize}px "NonExistentFont12345"`
+    const missingFontWidth = ctx.measureText(testString).width
+
+    // If this font's width differs from a missing font, it's actually installed
+    if (Math.abs(fontWidth - missingFontWidth) > 0.1) {
+      return { available: font, requested, usingFallback: font !== requested }
+    }
+  }
+
+  return { available: null, requested, usingFallback: true }
+}
+
 /** Detect the most common background color from terminal content */
 function getMostCommonBackground(data: VTermData): string {
   const bgCounts = new Map<string, number>()
@@ -92,6 +135,7 @@ export class CanvasRenderer {
   private rows: number = 24
   private metrics: FontMetrics
   private detectedBackground: string | null = null
+  private userProvidedBackground: boolean
 
   private onResize?: (size: { cols: number; rows: number }) => void
   private resizeTimeout: ReturnType<typeof setTimeout> | null = null
@@ -105,9 +149,30 @@ export class CanvasRenderer {
     this.lineHeightMultiplier = options.lineHeight ?? DEFAULT_LINE_HEIGHT
     this.fontFamily = options.fontFamily ?? "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
+    this.userProvidedBackground = options.backgroundColor !== undefined && 
+      options.backgroundColor !== "transparent" && 
+      options.backgroundColor !== "#00000000"
     this.textColor = options.textColor ?? DEFAULT_FG
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
     this.onResize = options.onResize
+
+    // Check font availability after fonts are loaded (handles web fonts)
+    document.fonts.ready.then(() => {
+      const fontCheck = checkFontAvailability(this.fontFamily, this.fontSize)
+      // Always log which font is being used for transparency
+      console.info(`[CanvasRenderer] Using font: "${fontCheck.available || "system monospace"}"`)
+      if (fontCheck.usingFallback) {
+        if (fontCheck.available) {
+          console.warn(
+            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using: "${fontCheck.available}"`
+          )
+        } else {
+          console.error(
+            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using system monospace fallback`
+          )
+        }
+      }
+    })
 
     // Measure font metrics
     this.metrics = this.measureFont()
@@ -301,17 +366,22 @@ export class CanvasRenderer {
     this.cols = data.cols
     this.rows = data.rows
 
-    // Auto-detect background from terminal content (only once)
+    // Determine background color (only once)
     if (!this.detectedBackground) {
-      const bg = getMostCommonBackground(data)
-      this.detectedBackground = bg
-      this.backgroundColor = bg
+      if (this.userProvidedBackground) {
+        // Use user-provided background
+        this.detectedBackground = this.backgroundColor
+      } else {
+        // Auto-detect from terminal content
+        this.detectedBackground = getMostCommonBackground(data)
+        this.backgroundColor = this.detectedBackground
+      }
 
       // Apply to document body and wrapper for seamless background
-      document.body.style.backgroundColor = bg
+      document.body.style.backgroundColor = this.detectedBackground
       const wrapper = this.canvas.parentElement
       if (wrapper) {
-        wrapper.style.backgroundColor = bg
+        wrapper.style.backgroundColor = this.detectedBackground
       }
     }
 
