@@ -127,13 +127,11 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       return
     }
 
-    // Let browser handle F-keys (F1-F12 for devtools etc) and meta shortcuts
+    // Don't prevent default for F-keys and meta shortcuts - let browser also handle them
     const isFKey = e.key.startsWith("F") && e.key.length <= 3 && !isNaN(Number(e.key.slice(1)))
-    if (isFKey || e.metaKey) {
-      return
+    if (!isFKey && !e.metaKey) {
+      e.preventDefault()
     }
-
-    e.preventDefault()
 
     // Map browser modifiers to terminal modifiers:
     // Browser altKey (Alt/Option) → Terminal meta (bit 2)
