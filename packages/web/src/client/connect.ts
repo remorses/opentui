@@ -40,6 +40,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   wsUrl.searchParams.set("cols", String(cols))
   wsUrl.searchParams.set("rows", String(rows))
 
+
   const ws = new WebSocket(wsUrl.toString())
 
   // Handle WebSocket events
@@ -95,10 +96,13 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       return
     }
 
-    // Prevent default for most keys to avoid browser shortcuts
-    if (!e.metaKey || e.key === "c" || e.key === "v") {
-      e.preventDefault()
+    // Let browser handle F-keys (F1-F12 for devtools etc) and meta shortcuts
+    const isFKey = e.key.startsWith("F") && e.key.length <= 3 && !isNaN(Number(e.key.slice(1)))
+    if (isFKey || e.metaKey) {
+      return
     }
+
+    e.preventDefault()
 
     send({
       type: "key",

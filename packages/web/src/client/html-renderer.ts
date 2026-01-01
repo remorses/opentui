@@ -1,5 +1,31 @@
 import type { VTermData, VTermLine, VTermSpan, LineDiff } from "../shared/types"
 
+const DEFAULT_BG = "#1e1e1e"
+
+function getMostCommonBackground(data: VTermData): string {
+  const bgCounts = new Map<string, number>()
+
+  for (const line of data.lines) {
+    for (const span of line.spans) {
+      const bg = span.bg || ""
+      if (!bg || bg === "#00000000" || bg === "transparent") continue
+      const count = bgCounts.get(bg) || 0
+      bgCounts.set(bg, count + span.text.length)
+    }
+  }
+
+  let maxBg = ""
+  let maxCount = 0
+  for (const [bg, count] of bgCounts) {
+    if (count > maxCount) {
+      maxCount = count
+      maxBg = bg
+    }
+  }
+
+  return maxBg || DEFAULT_BG
+}
+
 // Style flags matching VTermStyleFlags from core
 const StyleFlags = {
   BOLD: 1,
@@ -58,12 +84,16 @@ function lineToHtml(line: VTermLine): string {
 
 export interface TerminalRendererOptions {
   container: HTMLElement
+  /** Maximum columns (default 200) */
   maxCols?: number
-  responsive?: boolean
+  /** Maximum rows (default 200) */
+  maxRows?: number
   fontFamily?: string
   fontSize?: number
   backgroundColor?: string
   textColor?: string
+  /** Auto-detect and set document.body background from terminal content */
+  autoBackground?: boolean
 }
 
 export class TerminalRenderer {
@@ -72,16 +102,19 @@ export class TerminalRenderer {
   private lineElements: HTMLDivElement[] = []
   private cursorEl: HTMLDivElement
   private maxCols: number
-  private responsive: boolean
+  private maxRows: number
   private fontSize: number
   private cols: number = 80
   private rows: number = 24
+  private backgroundSet: boolean = false
+  private autoBackground: boolean
 
   constructor(options: TerminalRendererOptions) {
     this.container = options.container
     this.maxCols = options.maxCols ?? 200
-    this.responsive = options.responsive ?? true
+    this.maxRows = options.maxRows ?? 200
     this.fontSize = options.fontSize ?? 14
+    this.autoBackground = options.autoBackground ?? true
 
     // Create terminal container
     this.terminalEl = document.createElement("div")
@@ -115,10 +148,6 @@ export class TerminalRenderer {
 
     // Add global styles
     this.injectStyles()
-
-    if (this.responsive) {
-      this.setupResponsive()
-    }
   }
 
   private injectStyles() {
@@ -148,25 +177,16 @@ export class TerminalRenderer {
     document.head.appendChild(style)
   }
 
-  private setupResponsive() {
-    const charWidthRatio = 0.6
-    const padding = 16
-
-    const adjustFontSize = () => {
-      const containerWidth = this.container.clientWidth
-      const calculatedSize = (containerWidth - padding) / (this.maxCols * charWidthRatio)
-      const newFontSize = Math.max(4, Math.min(16, calculatedSize))
-      this.terminalEl.style.fontSize = `${newFontSize}px`
-      this.fontSize = newFontSize
-    }
-
-    adjustFontSize()
-    window.addEventListener("resize", adjustFontSize)
-  }
-
   renderFull(data: VTermData) {
     this.cols = data.cols
     this.rows = data.rows
+
+    // Set page background from first frame
+    if (this.autoBackground && !this.backgroundSet) {
+      const bg = getMostCommonBackground(data)
+      document.body.style.backgroundColor = bg
+      this.backgroundSet = true
+    }
 
     // Clear existing lines
     this.lineElements = []
@@ -218,12 +238,11 @@ export class TerminalRenderer {
   }
 
   getSize(): { cols: number; rows: number } {
-    // Calculate based on container size
     const charWidth = this.fontSize * 0.6
     const lineHeight = this.fontSize * 1.2
 
     const cols = Math.min(Math.floor(this.container.clientWidth / charWidth), this.maxCols)
-    const rows = Math.floor(this.container.clientHeight / lineHeight)
+    const rows = Math.min(Math.floor(this.container.clientHeight / lineHeight), this.maxRows)
 
     return { cols, rows }
   }
