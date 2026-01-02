@@ -117,7 +117,9 @@ export interface CanvasRendererOptions {
 
 export interface FontMetrics {
   charWidth: number
-  charHeight: number
+  /** Cell height (with line height applied) */
+  cellHeight: number
+  /** Baseline offset from top of cell (for vertical centering) */
   baseline: number
 }
 
@@ -169,10 +171,8 @@ export class CanvasRenderer {
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
     this.onResize = options.onResize
 
-    // Use 'ideographic' baseline for better glyph alignment (like xterm.js)
-    // Firefox needs 'bottom' for correct rendering
-    const isFirefox = typeof navigator !== "undefined" && navigator.userAgent.includes("Firefox")
-    this.textBaseline = isFirefox ? "bottom" : "ideographic"
+    // Use 'alphabetic' baseline - most standard and predictable
+    this.textBaseline = "alphabetic"
 
     // Check font availability after fonts are loaded (handles web fonts)
     document.fonts.ready.then(() => {
@@ -204,7 +204,7 @@ export class CanvasRenderer {
     wrapper.style.cssText = `
       position: relative;
       width: ${this.cols * this.metrics.charWidth}px;
-      height: ${this.rows * this.metrics.charHeight}px;
+      height: ${this.rows * this.metrics.cellHeight}px;
       background-color: ${this.backgroundColor};
       overflow: hidden;
     `
@@ -217,7 +217,7 @@ export class CanvasRenderer {
       top: 0;
       left: 0;
       width: ${this.cols * this.metrics.charWidth}px;
-      height: ${this.rows * this.metrics.charHeight}px;
+      height: ${this.rows * this.metrics.cellHeight}px;
       pointer-events: none;
       z-index: 1;
     `
@@ -233,7 +233,7 @@ export class CanvasRenderer {
       height: 100%;
       font-family: ${this.fontFamily};
       font-size: ${this.fontSize}px;
-      line-height: ${this.metrics.charHeight}px;
+      line-height: ${this.metrics.cellHeight}px;
       color: transparent;
       white-space: pre;
       user-select: text;
@@ -244,7 +244,7 @@ export class CanvasRenderer {
 
     // Set canvas size for high-DPI
     this.canvas.width = this.cols * this.metrics.charWidth * this.dpr
-    this.canvas.height = this.rows * this.metrics.charHeight * this.dpr
+    this.canvas.height = this.rows * this.metrics.cellHeight * this.dpr
 
     const ctx = this.canvas.getContext("2d", { alpha: false })
     if (!ctx) {
@@ -259,7 +259,7 @@ export class CanvasRenderer {
     this.cursorEl.style.cssText = `
       position: absolute;
       width: ${this.metrics.charWidth}px;
-      height: ${this.metrics.charHeight}px;
+      height: ${this.metrics.cellHeight}px;
       background-color: rgba(255, 255, 255, 0.7);
       pointer-events: none;
       display: none;
@@ -296,25 +296,33 @@ export class CanvasRenderer {
     // Use actualBoundingBox for accurate height, fallback to fontSize-based estimate
     const ascent = metrics.actualBoundingBoxAscent ?? this.fontSize * 0.8
     const descent = metrics.actualBoundingBoxDescent ?? this.fontSize * 0.2
-    const naturalHeight = ascent + descent
 
-    // Apply line height multiplier to fontSize (like CSS line-height)
-    const charHeight = Math.ceil(this.fontSize * this.lineHeightMultiplier)
+    // Natural character height (like xterm.js scaledCharHeight)
+    const charHeight = Math.ceil(ascent + descent)
 
-    // Center the text vertically within the line height
-    const verticalPadding = (charHeight - naturalHeight) / 2
-    const baseline = Math.ceil(verticalPadding + ascent)
+    // Cell height with line height applied (like xterm.js scaledCellHeight)
+    const cellHeight = Math.ceil(this.fontSize * this.lineHeightMultiplier)
+
+    // Vertical centering offset (like xterm.js scaledCharTop)
+    // This centers the natural character height within the taller cell
+    const charTop =
+      this.lineHeightMultiplier === 1 ? 0 : Math.round((cellHeight - charHeight) / 2)
+
+    // For "alphabetic" baseline, position so text is vertically centered:
+    // - charTop = top padding = (cellHeight - charHeight) / 2
+    // - baseline position = charTop + ascent (baseline is ascent pixels from top of text)
+    const baseline = Math.round(charTop + ascent)
 
     return {
       charWidth,
-      charHeight,
+      cellHeight,
       baseline,
     }
   }
 
   private recalculateSize(): void {
     const pageCols = Math.floor(window.innerWidth / this.metrics.charWidth)
-    const pageRows = Math.floor(window.innerHeight / this.metrics.charHeight)
+    const pageRows = Math.floor(window.innerHeight / this.metrics.cellHeight)
 
     this.cols = Math.min(this.maxCols, pageCols)
     this.rows = Math.min(this.maxRows, pageRows)
@@ -338,7 +346,7 @@ export class CanvasRenderer {
 
   private updateSize(): void {
     const width = this.cols * this.metrics.charWidth
-    const height = this.rows * this.metrics.charHeight
+    const height = this.rows * this.metrics.cellHeight
 
     // Update wrapper
     const wrapper = this.canvas.parentElement
@@ -378,7 +386,7 @@ export class CanvasRenderer {
 
   private clear(): void {
     this.ctx.fillStyle = this.backgroundColor
-    this.ctx.fillRect(0, 0, this.cols * this.metrics.charWidth, this.rows * this.metrics.charHeight)
+    this.ctx.fillRect(0, 0, this.cols * this.metrics.charWidth, this.rows * this.metrics.cellHeight)
   }
 
   /**
@@ -434,9 +442,9 @@ export class CanvasRenderer {
   applyDiff(changes: Array<{ index: number; line: VTermLine }>): void {
     for (const { index, line } of changes) {
       // Clear line area on canvas
-      const y = index * this.metrics.charHeight
+      const y = index * this.metrics.cellHeight
       this.ctx.fillStyle = this.backgroundColor
-      this.ctx.fillRect(0, y, this.cols * this.metrics.charWidth, this.metrics.charHeight)
+      this.ctx.fillRect(0, y, this.cols * this.metrics.charWidth, this.metrics.cellHeight)
 
       // Re-render line
       this.renderLine(line, index)
@@ -444,7 +452,7 @@ export class CanvasRenderer {
   }
 
   private renderLine(line: VTermLine, lineIndex: number): void {
-    const y = lineIndex * this.metrics.charHeight
+    const y = lineIndex * this.metrics.cellHeight
     let x = 0
     let textContent = ""
 
@@ -466,7 +474,7 @@ export class CanvasRenderer {
     // Ensure we have enough line divs
     while (this.textLayer.children.length <= lineIndex) {
       const lineDiv = document.createElement("div")
-      lineDiv.style.height = `${this.metrics.charHeight}px`
+      lineDiv.style.height = `${this.metrics.cellHeight}px`
       this.textLayer.appendChild(lineDiv)
     }
 
@@ -506,21 +514,21 @@ export class CanvasRenderer {
       // This ensures text edges blend correctly with the background
       const effectiveBg = bg && bg !== "#00000000" && bg !== "transparent" ? bg : this.backgroundColor
       this.ctx.fillStyle = effectiveBg
-      this.ctx.fillRect(cellX, cellY, this.metrics.charWidth * (span.width || 1), this.metrics.charHeight)
+      this.ctx.fillRect(cellX, cellY, this.metrics.charWidth * (span.width || 1), this.metrics.cellHeight)
 
       // Check for custom glyph
       const customGlyph = customGlyphDefinitions[char]
       if (customGlyph) {
         this.renderCustomGlyph(customGlyph, cellX, cellY, fg, alpha)
       } else if (char !== " " && char !== "\u00A0") {
-        // Draw regular character
+        // Draw regular character (baseline positioned for vertical centering)
         this.ctx.fillStyle = fg
         this.ctx.globalAlpha = alpha
         this.ctx.fillText(char, cellX, cellY + this.metrics.baseline)
         this.ctx.globalAlpha = 1
       }
 
-      // Draw underline (with pixel snapping for crisp lines)
+      // Draw underline (just below baseline, with pixel snapping for crisp lines)
       if (span.flags & StyleFlags.UNDERLINE) {
         this.ctx.strokeStyle = fg
         this.ctx.lineWidth = 1
@@ -531,12 +539,12 @@ export class CanvasRenderer {
         this.ctx.stroke()
       }
 
-      // Draw strikethrough (with pixel snapping for crisp lines)
+      // Draw strikethrough (at vertical center of cell, with pixel snapping for crisp lines)
       if (span.flags & StyleFlags.STRIKETHROUGH) {
         this.ctx.strokeStyle = fg
         this.ctx.lineWidth = 1
         this.ctx.beginPath()
-        const strikeY = this.snapToPixel(cellY + this.metrics.charHeight / 2)
+        const strikeY = this.snapToPixel(cellY + this.metrics.cellHeight / 2)
         this.ctx.moveTo(cellX, strikeY)
         this.ctx.lineTo(cellX + this.metrics.charWidth, strikeY)
         this.ctx.stroke()
@@ -558,13 +566,13 @@ export class CanvasRenderer {
         x,
         y,
         this.metrics.charWidth,
-        this.metrics.charHeight,
+        this.metrics.cellHeight,
         glyph.strokeWidth,
         color,
         this.dpr
       )
     } else if (glyph.type === "block") {
-      drawBlocks(this.ctx, glyph.rects, x, y, this.metrics.charWidth, this.metrics.charHeight, color)
+      drawBlocks(this.ctx, glyph.rects, x, y, this.metrics.charWidth, this.metrics.cellHeight, color)
     }
 
     this.ctx.globalAlpha = 1
@@ -578,13 +586,13 @@ export class CanvasRenderer {
 
     // Convert from 1-based terminal coordinates to 0-based
     const cssX = (x - 1) * this.metrics.charWidth
-    const cssY = (y - 1) * this.metrics.charHeight
+    const cssY = (y - 1) * this.metrics.cellHeight
 
     this.cursorEl.style.display = "block"
     this.cursorEl.style.left = `${cssX}px`
     this.cursorEl.style.top = `${cssY}px`
     this.cursorEl.style.width = `${this.metrics.charWidth}px`
-    this.cursorEl.style.height = `${this.metrics.charHeight}px`
+    this.cursorEl.style.height = `${this.metrics.cellHeight}px`
   }
 
   getSize(): { cols: number; rows: number } {
