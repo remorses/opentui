@@ -236,13 +236,20 @@ export class CanvasRenderer {
       height: 100%;
       font-family: ${this.fontFamily};
       font-size: ${this.fontSize}px;
+      font-weight: ${this.fontWeight};
       line-height: ${this.metrics.cellHeight}px;
+      letter-spacing: ${this.letterSpacing}px;
       color: transparent;
       white-space: pre;
       user-select: text;
       -webkit-user-select: text;
       cursor: text;
       z-index: 2;
+      /* Disable ligatures and kerning for consistent character width */
+      font-variant-ligatures: none;
+      font-kerning: none;
+      text-rendering: optimizeSpeed;
+      -webkit-font-smoothing: antialiased;
     `
 
     // Set canvas size for high-DPI
@@ -294,8 +301,8 @@ export class CanvasRenderer {
     ctx.font = `${this.fontSize}px ${this.fontFamily}`
 
     const metrics = ctx.measureText("M")
-    // Add letter spacing to character width
-    const charWidth = Math.ceil(metrics.width + this.letterSpacing)
+    // Use exact width (no rounding) to match HTML text layer for selection alignment
+    const charWidth = metrics.width + this.letterSpacing
 
     // Use actualBoundingBox for accurate height, fallback to fontSize-based estimate
     const ascent = metrics.actualBoundingBoxAscent ?? this.fontSize * 0.8
