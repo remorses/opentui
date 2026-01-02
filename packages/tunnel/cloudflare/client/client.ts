@@ -16,10 +16,18 @@ if (!tunnelId) {
   connectTerminal({
     url: wsUrl,
     container: "#terminal",
+    maxCols: 120,
+    maxRows: 40,
+    useCanvas: true,
+    fontFamily: "Consolas, monospace",
+    fontSize: 14,
+    lineHeight: 1.4,
+    letterSpacing: 0,
+    fontWeight: 500,
+    fontWeightBold: 700,
     onConnect: () => {
       console.log("[opentui] Connected to tunnel:", tunnelId)
     },
-    useCanvas: true,
     onDisconnect: () => {
       console.log("[opentui] Disconnected from tunnel")
       // Show reconnecting message
