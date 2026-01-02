@@ -1,6 +1,6 @@
 /**
  * Demo script that exposes the OpenTUI demo via a public tunnel URL.
- * 
+ *
  * Usage: bun run demo/tunnel.tsx
  */
 

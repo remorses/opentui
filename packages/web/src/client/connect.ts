@@ -21,7 +21,15 @@ export interface TerminalConnection {
 }
 
 export function connectTerminal(options: ConnectOptions): TerminalConnection {
-  const { url, container: containerOption, useCanvas=true, onConnect, onDisconnect, onError, ...rendererOptions } = options
+  const {
+    url,
+    container: containerOption,
+    useCanvas = true,
+    onConnect,
+    onDisconnect,
+    onError,
+    ...rendererOptions
+  } = options
 
   // Resolve container
   const container =

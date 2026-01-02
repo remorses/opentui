@@ -1,7 +1,7 @@
 import { connectTerminal } from "@opentui/web/client"
 
 // Extract tunnelId from URL path: /s/{tunnelId}
-const tunnelId = window.location.pathname.split('/').pop() // Take last segment as tunnelId
+const tunnelId = window.location.pathname.split("/").pop() // Take last segment as tunnelId
 
 if (!tunnelId) {
   document.getElementById("terminal")!.innerHTML = `

@@ -24,7 +24,7 @@ const DEFAULT_MAX_ROWS = 200
  */
 function checkFontAvailability(
   fontFamily: string,
-  fontSize: number
+  fontSize: number,
 ): { available: string | null; requested: string; usingFallback: boolean } {
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")!
@@ -159,12 +159,15 @@ export class CanvasRenderer {
     this.maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
     this.lineHeightMultiplier = options.lineHeight ?? DEFAULT_LINE_HEIGHT
-    this.fontFamily = options.fontFamily ?? "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+    this.fontFamily =
+      options.fontFamily ??
+      "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
     this.fontWeight = options.fontWeight ?? 500
     this.fontWeightBold = options.fontWeightBold ?? "bold"
     this.letterSpacing = options.letterSpacing ?? 0
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
-    this.userProvidedBackground = options.backgroundColor !== undefined &&
+    this.userProvidedBackground =
+      options.backgroundColor !== undefined &&
       options.backgroundColor !== "transparent" &&
       options.backgroundColor !== "#00000000"
     this.textColor = options.textColor ?? DEFAULT_FG
@@ -182,11 +185,11 @@ export class CanvasRenderer {
       if (fontCheck.usingFallback) {
         if (fontCheck.available) {
           console.warn(
-            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using: "${fontCheck.available}"`
+            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using: "${fontCheck.available}"`,
           )
         } else {
           console.error(
-            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using system monospace fallback`
+            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using system monospace fallback`,
           )
         }
       }
@@ -260,7 +263,8 @@ export class CanvasRenderer {
       position: absolute;
       width: ${this.metrics.charWidth}px;
       height: ${this.metrics.cellHeight}px;
-      background-color: rgba(255, 255, 255, 0.7);
+      background-color: white;
+      mix-blend-mode: difference;
       pointer-events: none;
       display: none;
       z-index: 3;
@@ -305,8 +309,7 @@ export class CanvasRenderer {
 
     // Vertical centering offset (like xterm.js scaledCharTop)
     // This centers the natural character height within the taller cell
-    const charTop =
-      this.lineHeightMultiplier === 1 ? 0 : Math.round((cellHeight - charHeight) / 2)
+    const charTop = this.lineHeightMultiplier === 1 ? 0 : Math.round((cellHeight - charHeight) / 2)
 
     // For "alphabetic" baseline, position so text is vertically centered:
     // - charTop = top padding = (cellHeight - charHeight) / 2
@@ -569,7 +572,7 @@ export class CanvasRenderer {
         this.metrics.cellHeight,
         glyph.strokeWidth,
         color,
-        this.dpr
+        this.dpr,
       )
     } else if (glyph.type === "block") {
       drawBlocks(this.ctx, glyph.rects, x, y, this.metrics.charWidth, this.metrics.cellHeight, color)

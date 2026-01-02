@@ -237,7 +237,7 @@ export function drawPath(
   cellHeight: number,
   strokeWidth: number,
   color: string,
-  devicePixelRatio: number = 1
+  devicePixelRatio: number = 1,
 ): void {
   ctx.save()
   ctx.strokeStyle = color
@@ -262,13 +262,13 @@ export function drawPath(
       case "M": // Move to
         ctx.moveTo(
           x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
-          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio)
+          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio),
         )
         break
       case "L": // Line to
         ctx.lineTo(
           x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
-          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio)
+          y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio),
         )
         break
       case "Q": // Quadratic curve
@@ -276,7 +276,7 @@ export function drawPath(
           x + snapToPixel(args[0] * cellWidth, cellWidth, devicePixelRatio),
           y + snapToPixel(args[1] * cellHeight, cellHeight, devicePixelRatio),
           x + snapToPixel(args[2] * cellWidth, cellWidth, devicePixelRatio),
-          y + snapToPixel(args[3] * cellHeight, cellHeight, devicePixelRatio)
+          y + snapToPixel(args[3] * cellHeight, cellHeight, devicePixelRatio),
         )
         break
       case "C": // Cubic curve
@@ -286,7 +286,7 @@ export function drawPath(
           x + snapToPixel(args[2] * cellWidth, cellWidth, devicePixelRatio),
           y + snapToPixel(args[3] * cellHeight, cellHeight, devicePixelRatio),
           x + snapToPixel(args[4] * cellWidth, cellWidth, devicePixelRatio),
-          y + snapToPixel(args[5] * cellHeight, cellHeight, devicePixelRatio)
+          y + snapToPixel(args[5] * cellHeight, cellHeight, devicePixelRatio),
         )
         break
       case "Z": // Close path
@@ -310,7 +310,7 @@ export function drawBlocks(
   y: number,
   cellWidth: number,
   cellHeight: number,
-  color: string
+  color: string,
 ): void {
   ctx.save()
   ctx.fillStyle = color
