@@ -21,7 +21,7 @@ export interface TerminalConnection {
 }
 
 export function connectTerminal(options: ConnectOptions): TerminalConnection {
-  const { url, container: containerOption, useCanvas, onConnect, onDisconnect, onError, ...rendererOptions } = options
+  const { url, container: containerOption, useCanvas=true, onConnect, onDisconnect, onError, ...rendererOptions } = options
 
   // Resolve container
   const container =
@@ -190,29 +190,45 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     send({ type: "mouse", action: "up", x, y, button: e.button })
   }
 
-  // Throttle wheel events and batch scroll amount
-  let wheelAccumulator = 0
-  let wheelTimeout: ReturnType<typeof setTimeout> | null = null
+  // Coalesce wheel events within a single animation frame
+  let scrollAccumulator = 0
+  let scrollPending: { x: number; y: number } | null = null
 
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault()
 
-    // Accumulate scroll delta
-    wheelAccumulator += e.deltaY
-
-    // Process immediately if we have enough delta (40px = ~1 line)
-    const linesToScroll = Math.trunc(wheelAccumulator / 40)
-    if (linesToScroll !== 0) {
-      const { x, y } = getTerminalCoords(e)
-      const direction = linesToScroll > 0 ? 5 : 4 // 5 = down, 4 = up
-      const count = Math.abs(linesToScroll)
-
-      // Send multiple scroll events for faster scrolling
-      for (let i = 0; i < Math.min(count, 5); i++) {
-        send({ type: "mouse", action: "scroll", x, y, button: direction })
+    // Convert to lines based on deltaMode
+    let deltaLines: number
+    switch (e.deltaMode) {
+      case WheelEvent.DOM_DELTA_LINE:
+        deltaLines = e.deltaY
+        break
+      case WheelEvent.DOM_DELTA_PAGE: {
+        const { rows } = renderer.getSize()
+        deltaLines = e.deltaY * rows
+        break
       }
+      default: {
+        // DOM_DELTA_PIXEL - use renderer's actual line height
+        const lineHeight = (renderer as any).metrics?.charHeight ?? 20
+        deltaLines = e.deltaY / lineHeight
+        break
+      }
+    }
 
-      wheelAccumulator = wheelAccumulator % 40 // Keep remainder
+    scrollAccumulator += deltaLines
+
+    // Batch all wheel events within one animation frame into a single message
+    if (!scrollPending) {
+      scrollPending = getTerminalCoords(e)
+      requestAnimationFrame(() => {
+        const lines = Math.trunc(scrollAccumulator)
+        if (lines !== 0) {
+          send({ type: "scroll", x: scrollPending!.x, y: scrollPending!.y, lines })
+          scrollAccumulator -= lines // keep fractional remainder
+        }
+        scrollPending = null
+      })
     }
   }
 

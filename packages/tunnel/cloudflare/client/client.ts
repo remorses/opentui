@@ -1,7 +1,7 @@
 import { connectTerminal } from "@opentui/web/client"
 
 // Extract tunnelId from URL path: /s/{tunnelId}
-const tunnelId = window.location.pathname.slice(3) // Remove "/s/"
+const tunnelId = window.location.pathname.split('/').pop() // Take last segment as tunnelId
 
 if (!tunnelId) {
   document.getElementById("terminal")!.innerHTML = `
@@ -19,6 +19,7 @@ if (!tunnelId) {
     onConnect: () => {
       console.log("[opentui] Connected to tunnel:", tunnelId)
     },
+    useCanvas: true,
     onDisconnect: () => {
       console.log("[opentui] Disconnected from tunnel")
       // Show reconnecting message

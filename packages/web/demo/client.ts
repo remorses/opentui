@@ -10,7 +10,7 @@ connectTerminal({
   fontSize: 14,
   lineHeight: 1.4,
   letterSpacing: 0,
-  // fontWeight: 500, // Heavier than normal (400) for better readability
+  fontWeight: 500, // Heavier than normal (400) for better readability
   fontWeightBold: 700,
 
   // letterSpacing: 2, // Wider character cells

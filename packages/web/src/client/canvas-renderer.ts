@@ -160,12 +160,12 @@ export class CanvasRenderer {
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
     this.lineHeightMultiplier = options.lineHeight ?? DEFAULT_LINE_HEIGHT
     this.fontFamily = options.fontFamily ?? "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
-    this.fontWeight = options.fontWeight ?? "normal"
+    this.fontWeight = options.fontWeight ?? 500
     this.fontWeightBold = options.fontWeightBold ?? "bold"
     this.letterSpacing = options.letterSpacing ?? 0
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
-    this.userProvidedBackground = options.backgroundColor !== undefined && 
-      options.backgroundColor !== "transparent" && 
+    this.userProvidedBackground = options.backgroundColor !== undefined &&
+      options.backgroundColor !== "transparent" &&
       options.backgroundColor !== "#00000000"
     this.textColor = options.textColor ?? DEFAULT_FG
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1

@@ -156,9 +156,17 @@ export class SessionCore {
           case "move":
             mockMouse.moveTo(message.x, message.y)
             break
-          case "scroll":
-            mockMouse.scroll(message.x, message.y, message.button === 4 ? "up" : "down")
-            break
+        }
+        this.dirty = true
+        this.tick()
+        break
+      }
+
+      case "scroll": {
+        const direction = message.lines > 0 ? "down" : "up"
+        const count = Math.min(Math.abs(message.lines), 50) // cap for sanity
+        for (let i = 0; i < count; i++) {
+          mockMouse.scroll(message.x, message.y, direction)
         }
         this.dirty = true
         this.tick()
