@@ -25,6 +25,8 @@ export type MultiplexerEvent =
   | { type: "upstream_connected"; id: string }
   | { type: "upstream_discovered"; id: string }
   | { type: "upstream_error"; id: string; error?: { message?: string; name?: string } }
+  | { type: "multiplexer_connected" }
+  | { type: "multiplexer_disconnected" }
 
 export type MultiplexerListener = (event: MultiplexerEvent) => void
 
@@ -74,12 +76,14 @@ export class MultiplexerConnection {
       this._connected = true
       console.log("[opentui/multiplexer] Connected")
       this.options.onConnect?.()
+      this.emit({ type: "multiplexer_connected" })
     }
 
     this.ws.onclose = () => {
       this._connected = false
       console.log("[opentui/multiplexer] Disconnected")
       this.options.onDisconnect?.()
+      this.emit({ type: "multiplexer_disconnected" })
       this.ws = null
     }
 

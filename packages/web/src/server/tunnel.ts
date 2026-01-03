@@ -1,41 +1,22 @@
-import { SessionCore, type Session, type ClientMessage, type ServerMessage } from "@opentui/web"
-import { ulid } from "ulid"
+import { createSession, type Session, type SessionHandle } from "./session"
+import type { ClientMessage, ServerMessage } from "../shared/types"
 
 const DEFAULT_TUNNEL_URL = "wss://opentui.net/_tunnel"
-const DEFAULT_HTML_URL = "https://opentui.net"
 
 export interface TunnelOptions {
-  /**
-   * Tunnel ID - acts as the secret for this tunnel.
-   * If not provided, a random UUID will be generated.
-   * Use a custom ID if you want to host the client yourself.
-   */
-  tunnelId?: string
+  /** Tunnel WebSocket URL. Defaults to wss://opentui.net/_tunnel */
+  url?: string
 
-  /**
-   * Namespace for grouping multiple tunnels.
-   * Defaults to tunnelId if not provided.
-   * Multiple tunnels can share a namespace for multiplexed connections.
-   */
+  /** Namespace for the tunnel. Defaults to tunnelId */
   namespace?: string
 
-  /**
-   * Tunnel WebSocket URL.
-   * Defaults to wss://opentui.net/_tunnel
-   */
-  tunnelUrl?: string
-
-  /**
-   * Base URL for the hosted HTML client.
-   * Defaults to https://opentui.net
-   * Set to null to disable HTML URL logging.
-   */
-  htmlUrl?: string | null
+  /** Tunnel ID. Defaults to a random UUID */
+  tunnelId?: string
 
   /** Called when a browser connects */
   onConnection: (session: Session) => void | (() => void)
 
-  /** Called when connected to tunnel with shareable URLs */
+  /** Called when connected to tunnel with shareable URL */
   onReady?: (info: TunnelInfo) => void
 
   /** Called on disconnect from tunnel */
@@ -61,37 +42,24 @@ export interface TunnelOptions {
 }
 
 export interface TunnelInfo {
-  /** Tunnel session ID */
   tunnelId: string
-
-  /** Namespace for multiplexed connections */
   namespace: string
-
-  /** WebSocket URL for custom client connections (multiplexer endpoint) */
   wsUrl: string
-
-  /** HTML page URL (if htmlUrl is configured) */
-  htmlUrl: string | null
+  htmlUrl: string
 }
 
 export interface TunnelConnection {
-  /** Tunnel info with URLs */
   info: TunnelInfo
-
-  /** Disconnect from tunnel */
   disconnect: () => void
-
-  /** Whether currently connected */
   readonly connected: boolean
 }
 
 /**
  * Connect to a WebSocket tunnel to expose your OpenTUI app via a public URL.
- * Returns a promise that resolves when connected, or rejects on error.
  *
  * @example
  * ```ts
- * import { connectTunnel } from '@opentui/tunnel'
+ * import { connectTunnel } from '@opentui/web'
  * import { createRoot } from '@opentui/react'
  *
  * const tunnel = await connectTunnel({
@@ -107,9 +75,8 @@ export interface TunnelConnection {
  */
 export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection> {
   const {
-    tunnelId = ulid().toLowerCase(),
-    tunnelUrl = DEFAULT_TUNNEL_URL,
-    htmlUrl = DEFAULT_HTML_URL,
+    url = DEFAULT_TUNNEL_URL,
+    tunnelId = crypto.randomUUID(),
     onConnection,
     onReady,
     onDisconnect,
@@ -121,22 +88,23 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
     rows = 24,
   } = options
 
-  // Namespace defaults to tunnelId
   const namespace = options.namespace ?? tunnelId
+  const wsUrl = `${url}/upstream?namespace=${namespace}&id=${tunnelId}`
 
-  const wsUrl = `${tunnelUrl}/upstream?namespace=${namespace}&id=${tunnelId}`
-  const fullHtmlUrl = htmlUrl ? `${htmlUrl}/s/${namespace}/${tunnelId}` : null
+  // Derive HTML URL from WebSocket URL
+  const htmlBaseUrl = url.replace("wss://", "https://").replace("ws://", "http://").replace("/_tunnel", "")
+  const htmlUrl = `${htmlBaseUrl}/s/${namespace}/${tunnelId}`
 
   const info: TunnelInfo = {
     tunnelId,
     namespace,
-    wsUrl: `${tunnelUrl}/multiplexer?namespace=${namespace}&id=${tunnelId}`,
-    htmlUrl: fullHtmlUrl,
+    wsUrl: `${url}/multiplexer?namespace=${namespace}&id=${tunnelId}`,
+    htmlUrl,
   }
 
   return new Promise((resolve, reject) => {
     let ws: WebSocket | null = null
-    let session: SessionCore | null = null
+    let session: SessionHandle | null = null
     let isConnected = false
     let pingInterval: Timer | null = null
 
@@ -149,7 +117,7 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
       const elapsed = Date.now() - start
 
       // Create session
-      session = new SessionCore({
+      session = await createSession({
         id: tunnelId,
         cols,
         rows,
@@ -161,12 +129,8 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
             ws.send(JSON.stringify(message))
           }
         },
+        close: () => disconnect(),
         onConnection,
-      })
-
-      await session.init(() => {
-        // Close callback - disconnect tunnel
-        disconnect()
       })
 
       // Keep-alive ping every 20 seconds
@@ -176,14 +140,9 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
         }
       }, 20000)
 
-      // Log URLs
-      console.log(`[opentui/tunnel] Connected to tunnel in ${(elapsed / 1000).toFixed(2)}s`)
-      console.log(`[opentui/tunnel] WebSocket URL: ${info.wsUrl}`)
-      if (info.htmlUrl) {
-        console.log(`[opentui/tunnel] Share URL: ${info.htmlUrl}`)
-      }
+      console.log(`[opentui/tunnel] Connected in ${(elapsed / 1000).toFixed(2)}s`)
+      console.log(`[opentui/tunnel] Share URL: ${info.htmlUrl}`)
 
-      // Notify ready
       onReady?.(info)
 
       resolve({
@@ -200,7 +159,6 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
 
       try {
         const message = JSON.parse(String(event.data)) as ClientMessage
-        // Ignore pong responses
         if ((message as any).type === "pong") return
         session.handleMessage(message)
       } catch (error) {
@@ -212,27 +170,19 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
       const wasConnected = isConnected
       isConnected = false
 
-      // Clear ping interval
       if (pingInterval) {
         clearInterval(pingInterval)
         pingInterval = null
       }
 
-      // Clean up session
       if (session) {
         session.destroy()
         session = null
       }
 
-      // Handle specific error codes
       if (event.code === 4009 || event.reason?.includes("Upstream already connected")) {
-        const error = new Error("Connection rejected: Another upstream is already connected with this tunnel ID")
-        console.error("\n[opentui/tunnel] Connection failed: Another upstream is already connected!")
-        console.error("   This usually means another instance is running with the same tunnel ID.")
-        console.error("   Solutions:")
-        console.error("   1. Stop the other instance first")
-        console.error("   2. Use a different tunnelId")
-        console.error("   3. Wait for the other instance to disconnect\n")
+        const error = new Error("Another upstream is already connected with this tunnel ID")
+        console.error("[opentui/tunnel] Connection rejected: tunnel ID already in use")
 
         if (!wasConnected) {
           reject(error)
@@ -243,39 +193,22 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
       }
 
       if (wasConnected) {
-        console.log(`[opentui/tunnel] Disconnected (code: ${event.code}, reason: ${event.reason || "none"})`)
+        console.log(`[opentui/tunnel] Disconnected (code: ${event.code})`)
         onDisconnect?.()
       } else {
-        // Connection failed before open
-        const error = new Error(`WebSocket closed during connection: ${event.code} - ${event.reason}`)
-        reject(error)
+        reject(new Error(`WebSocket closed: ${event.code} - ${event.reason}`))
       }
     }
 
-    ws.onerror = (event) => {
-      // Gather more info from event and WebSocket state
-      let details = "";
-      if (ws) {
-        details += ` readyState: ${ws.readyState}`;
-        if (typeof ws.url === "string") details += ` url: ${ws.url}`;
-      }
-      if (event && (event instanceof ErrorEvent)) {
-        details += ` message: ${event.message}`;
-        if (event.filename) details += ` filename: ${event.filename}`;
-        if (event.lineno) details += ` lineno: ${event.lineno}`;
-        if (event.colno) details += ` colno: ${event.colno}`;
-        if (event.error) details += ` error: ${event.error}`;
-      }
+    ws.onerror = () => {
+      const error = new Error("WebSocket error")
+      console.error("[opentui/tunnel] WebSocket error")
 
-      const error = new Error("WebSocket error" + (details ? ` (${details.trim()})` : ""));
-
-      console.error("[opentui/tunnel] WebSocket error", details);
       if (!isConnected) {
         reject(error)
       } else {
         onError?.(error)
       }
-
     }
 
     function disconnect() {

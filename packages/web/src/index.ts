@@ -2,6 +2,7 @@
 export { serve, type ServeOptions, type WebServer } from "./server/serve"
 export { opentuiWebSocket, type OpentuiWebSocketOptions } from "./server/websocket"
 export { type Session } from "./server/session"
+export { connectTunnel, type TunnelOptions, type TunnelInfo, type TunnelConnection } from "./server/tunnel"
 
 // Shared types
 export type {
@@ -14,12 +15,6 @@ export type {
   Modifiers,
   SessionInfo,
 } from "./shared/types"
-
-// Shared session core (for tunnel package)
-export { SessionCore, type SessionCoreOptions } from "./shared/session-core"
-
-// WebSocket abstraction
-export { type WebSocketLike, WebSocketState, ServerWebSocketAdapter, ClientWebSocketAdapter } from "./shared/websocket"
 
 // Utilities
 export { diffLines, applyDiff } from "./shared/span-differ"

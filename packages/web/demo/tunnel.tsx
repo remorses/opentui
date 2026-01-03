@@ -1,10 +1,10 @@
 /**
- * Demo script that exposes the OpenTUI demo via a public tunnel URL.
+ * Tunnel demo - same as server demo but exposed via public tunnel URL
  *
- * Usage: bun run demo/tunnel.tsx
+ * Usage: bun run demo:tunnel
  */
 
-import { connectTunnel } from "@opentui/tunnel"
+import { connectTunnel } from "../src/index"
 import { createRoot, useKeyboard } from "@opentui/react"
 import { useState, useEffect } from "react"
 import { SyntaxStyle, parseColor } from "@opentui/core"
@@ -61,6 +61,11 @@ const loremLines = [
   "Ut enim ad minim veniam, quis nostrud exercitation ullamco.",
   "Duis aute irure dolor in reprehenderit in voluptate velit.",
   "Excepteur sint occaecat cupidatat non proident.",
+  "Sunt in culpa qui officia deserunt mollit anim id est laborum.",
+  "Curabitur pretium tincidunt lacus. Nulla gravida orci a odio.",
+  "Nullam varius, turpis et commodo pharetra.",
+  "Est eros bibendum elit, nec luctus magna felis sollicitudin mauris.",
+  "Integer in mauris eu nibh euismod gravida.",
 ]
 
 type Tab = "overview" | "diff" | "scroll" | "colors"
@@ -123,12 +128,12 @@ function OverviewTab() {
 
         <box flexDirection="column" flexGrow={1} gap={1}>
           <box border borderStyle="single" borderColor={theme.success} padding={1} backgroundColor="#0d2818">
-            <text fg={theme.success}>✓ </text>
+            <text fg={theme.success}>[OK] </text>
             <text fg={theme.fg}>Connected via tunnel</text>
           </box>
 
           <box border borderStyle="single" borderColor={theme.info} padding={1} backgroundColor="#0d1f3c">
-            <text fg={theme.info}>ℹ </text>
+            <text fg={theme.info}>[i] </text>
             <text fg={theme.fg}>Press number keys to switch tabs</text>
           </box>
         </box>
@@ -254,9 +259,7 @@ function ColorsTab() {
 
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text fg={theme.accent}>
-        <strong>Color Palette & Text Styles</strong>
-      </text>
+      <text fg={theme.accent}>Color Palette & Text Styles</text>
 
       <box flexDirection="row" gap={1} flexWrap="wrap">
         {colors.map((color) => (
@@ -270,9 +273,7 @@ function ColorsTab() {
             width={15}
             alignItems="center"
           >
-            <text fg={color.fg}>
-              <strong>{color.name}</strong>
-            </text>
+            <text fg={color.fg}>{color.name}</text>
           </box>
         ))}
       </box>
@@ -364,42 +365,23 @@ function App() {
 }
 
 // Connect via tunnel
-console.log("Starting tunnel connection...")
+console.log("Connecting to tunnel...")
 
-const tunnel = await connectTunnel({
+await connectTunnel({
   maxCols: 120,
   maxRows: 40,
   cols: 80,
   rows: 24,
   frameRate: 60,
   onConnection: (session) => {
-    console.log(`Browser connected to session: ${session.id}`)
+    console.log(`Browser connected: ${session.id}`)
 
     const root = createRoot(session.renderer)
     root.render(<App />)
 
     return () => {
-      console.log(`Browser disconnected from session: ${session.id}`)
+      console.log(`Browser disconnected: ${session.id}`)
       root.unmount()
     }
-  },
-  onReady: (info) => {
-    console.log("")
-    console.log("=".repeat(60))
-    console.log("  OpenTUI Tunnel Demo")
-    console.log("=".repeat(60))
-    console.log("")
-    console.log(`  Share URL: ${info.htmlUrl}`)
-    console.log("")
-    console.log("  Open this URL in any browser to view the demo!")
-    console.log("  Press Ctrl+C to stop.")
-    console.log("")
-    console.log("=".repeat(60))
-  },
-  onDisconnect: () => {
-    console.log("Disconnected from tunnel")
-  },
-  onError: (error) => {
-    console.error("Tunnel error:", error)
   },
 })

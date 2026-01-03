@@ -58,9 +58,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     ...rendererOptions,
   })
 
-  // Get initial size
-  const { cols, rows } = renderer.getSize()
-
   // Send helper
   function send(message: ClientMessage) {
     connection.send(id, message)
@@ -119,18 +116,32 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   })
 
+  // Track if we've sent initial resize
+  let initialResizeSent = false
+
+  const sendInitialResize = () => {
+    if (initialResizeSent) return
+    initialResizeSent = true
+    const { cols, rows } = renderer.getSize()
+    send({ type: "resize", cols, rows })
+    onConnect?.()
+  }
+
   // Subscribe to connection state changes
   const unsubscribeGlobal = connection.subscribe((event) => {
-    // We only care about connect/disconnect at the connection level
+    // Send initial resize when multiplexer connects
+    if (event.type === "multiplexer_connected") {
+      sendInitialResize()
+    }
+    // Also handle upstream_connected for reconnection scenarios
     if (event.type === "upstream_connected" && event.id === id) {
-      onConnect?.()
+      sendInitialResize()
     }
   })
 
   // If connection is already connected, send initial resize
   if (connection.connected) {
-    onConnect?.()
-    send({ type: "resize", cols, rows })
+    sendInitialResize()
   }
 
   // Create hidden textarea for capturing text input
@@ -286,8 +297,14 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   }
 
+  // Click to focus
+  const handleClick = () => {
+    hiddenTextarea.focus()
+  }
+
   // Attach event listeners
   hiddenTextarea.addEventListener("keydown", handleKeyDown)
+  container.addEventListener("click", handleClick)
   container.addEventListener("mousedown", handleMouseDown)
   container.addEventListener("mousemove", handleMouseMove)
   container.addEventListener("mouseup", handleMouseUp)
@@ -315,6 +332,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
       hiddenTextarea.removeEventListener("keydown", handleKeyDown)
       hiddenTextarea.removeEventListener("input", handleInput)
+      container.removeEventListener("click", handleClick)
       container.removeEventListener("mousedown", handleMouseDown)
       container.removeEventListener("mousemove", handleMouseMove)
       container.removeEventListener("mouseup", handleMouseUp)
