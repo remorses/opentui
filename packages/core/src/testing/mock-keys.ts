@@ -12,6 +12,9 @@ export const KeyCodes = {
   HOME: "\x1b[H",
   END: "\x1b[F",
   ESCAPE: "\x1b",
+  INSERT: "\x1b[2~",
+  PAGEUP: "\x1b[5~",
+  PAGEDOWN: "\x1b[6~",
 
   // Arrow keys
   ARROW_UP: "\x1b[A",
@@ -189,7 +192,10 @@ export function createMockKeys(renderer: CliRenderer, options?: MockKeysOptions)
         "\x1b[D": "left",
         "\x1b[H": "home",
         "\x1b[F": "end",
+        "\x1b[2~": "insert",
         "\x1b[3~": "delete",
+        "\x1b[5~": "pageup",
+        "\x1b[6~": "pagedown",
       }
 
       // Check value mapping

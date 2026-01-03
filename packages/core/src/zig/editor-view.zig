@@ -186,8 +186,18 @@ pub const EditorView = struct {
         const viewport_width = vp.width;
         if (viewport_height == 0 or viewport_width == 0) return;
 
-        const margin_lines = @max(1, @as(u32, @intFromFloat(@as(f32, @floatFromInt(viewport_height)) * self.scroll_margin)));
-        const margin_cols = @max(1, @as(u32, @intFromFloat(@as(f32, @floatFromInt(viewport_width)) * self.scroll_margin)));
+        // Calculate margin but cap it to prevent oscillation.
+        // When margin * 2 >= viewport_height, the top and bottom margins overlap,
+        // causing the cursor to always be "too close" to one edge, which triggers
+        // scrolling back and forth indefinitely. Cap margin so there's always
+        // at least one line in the "safe zone" between margins.
+        const raw_margin_lines = @as(u32, @intFromFloat(@as(f32, @floatFromInt(viewport_height)) * self.scroll_margin));
+        const max_margin_lines = if (viewport_height > 2) (viewport_height - 1) / 2 else 0;
+        const margin_lines = @min(@max(1, raw_margin_lines), max_margin_lines);
+
+        const raw_margin_cols = @as(u32, @intFromFloat(@as(f32, @floatFromInt(viewport_width)) * self.scroll_margin));
+        const max_margin_cols = if (viewport_width > 2) (viewport_width - 1) / 2 else 0;
+        const margin_cols = @min(@max(1, raw_margin_cols), max_margin_cols);
 
         const total_lines = self.text_buffer_view.getVirtualLineCount();
         const max_offset_y = if (total_lines > viewport_height) total_lines - viewport_height else 0;
