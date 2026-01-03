@@ -68,8 +68,8 @@ type Tab = "overview" | "diff" | "scroll" | "colors"
 function Header({ tab, spinner }: { tab: Tab; spinner: string }) {
   return (
     <box flexDirection="row" marginBottom={1}>
-      <text bold fg={theme.accent}>
-        OpenTUI Web Demo {spinner}
+      <text fg={theme.accent}>
+        <strong>OpenTUI Web Demo {spinner}</strong>
       </text>
       <text fg={theme.dimmed}> | </text>
       <text fg={tab === "overview" ? theme.accent : theme.dimmed}>[1] Overview</text>
@@ -265,7 +265,7 @@ function ColorsTab() {
 
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text bold fg={theme.accent}>
+      <text  fg={theme.accent}>
         Color Palette & Text Styles
       </text>
 
@@ -282,7 +282,7 @@ function ColorsTab() {
             width={15}
             alignItems="center"
           >
-            <text fg={color.fg} bold>
+            <text fg={color.fg} >
               {color.name}
             </text>
           </box>
@@ -344,7 +344,7 @@ function App() {
 
   useKeyboard((e) => {
     // Only handle specific keys, let others pass through to focused input
-    const key = e.name || e.char
+    const key = e.name
     switch (key) {
       case "1":
         setTab("overview")
@@ -411,6 +411,7 @@ const server = Bun.serve({
   port: 3001,
   hostname: "0.0.0.0",
 
+  // @ts-expect-error - Bun's static option is not in the type definitions yet
   static: {
     "/": html,
     "/client.ts": new Response(clientJs, {

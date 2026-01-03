@@ -1,4 +1,4 @@
-import { connectTerminal } from "@opentui/web/client"
+import { MultiplexerConnection, connectTerminal } from "@opentui/web/client"
 
 // Extract namespace and tunnelId from URL path: /s/{namespace}/{tunnelId}
 const pathParts = window.location.pathname.split("/").filter(Boolean)
@@ -21,19 +21,11 @@ if (!namespace || !tunnelId) {
 
   const wsUrl = `wss://${window.location.host}/_tunnel`
 
-  const connection = connectTerminal({
+  // Create centralized multiplexer connection
+  const multiplexer = new MultiplexerConnection({
     url: wsUrl,
     namespace,
     ids: [tunnelId],
-    container,
-    useCanvas: true,
-    fontFamily: "Consolas, monospace",
-    fontSize: 14,
-    lineHeight: 1.4,
-    letterSpacing: 0,
-    fontWeight: 500,
-    fontWeightBold: 700,
-    backgroundColor: "#1e1e1e",
     onConnect: () => {
       console.log("[opentui] Connected to tunnel:", tunnelId, "namespace:", namespace)
     },
@@ -49,6 +41,34 @@ if (!namespace || !tunnelId) {
         setTimeout(() => window.location.reload(), 2000)
       }
     },
+    onError: (error) => {
+      console.error("[opentui] Error:", error)
+      const terminal = document.getElementById("terminal")
+      if (terminal && error.message.includes("4008")) {
+        terminal.innerHTML = `
+          <div style="color: #f85149; font-family: system-ui; text-align: center; padding-top: 40vh;">
+            <h1>Tunnel not active</h1>
+            <p>The upstream application is not connected.</p>
+          </div>
+        `
+      }
+    },
+  })
+
+  // Connect the multiplexer
+  multiplexer.connect()
+
+  const connection = connectTerminal({
+    connection: multiplexer,
+    id: tunnelId,
+    container,
+    fontFamily: "Consolas, monospace",
+    fontSize: 14,
+    lineHeight: 1.4,
+    letterSpacing: 0,
+    fontWeight: 500,
+    fontWeightBold: 700,
+    backgroundColor: "#1e1e1e",
     onUpstreamClosed: (id) => {
       console.log("[opentui] Upstream closed:", id)
       const terminal = document.getElementById("terminal")
@@ -60,18 +80,6 @@ if (!namespace || !tunnelId) {
           </div>
         `
         setTimeout(() => window.location.reload(), 2000)
-      }
-    },
-    onError: (error) => {
-      console.error("[opentui] Error:", error)
-      const terminal = document.getElementById("terminal")
-      if (terminal && error.message.includes("4008")) {
-        terminal.innerHTML = `
-          <div style="color: #f85149; font-family: system-ui; text-align: center; padding-top: 40vh;">
-            <h1>Tunnel not active</h1>
-            <p>The upstream application is not connected.</p>
-          </div>
-        `
       }
     },
   })

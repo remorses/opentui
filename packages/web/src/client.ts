@@ -1,5 +1,11 @@
 // Client exports (for browser)
 export { connectTerminal, type ConnectOptions, type TerminalConnection } from "./client/connect"
+export {
+  MultiplexerConnection,
+  type MultiplexerOptions,
+  type MultiplexerEvent,
+  type MultiplexerListener,
+} from "./client/multiplexer"
 export { CanvasRenderer, type CanvasRendererOptions } from "./client/canvas-renderer"
 
 // Measurement utilities for layout calculations

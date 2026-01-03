@@ -1,20 +1,20 @@
-import type { ClientMessage, ServerMessage, MultiplexedIncoming, MultiplexedOutgoing } from "../shared/types"
+import type { ClientMessage, ServerMessage } from "../shared/types"
 import { CanvasRenderer, type CanvasRendererOptions } from "./canvas-renderer"
+import { MultiplexerConnection } from "./multiplexer"
 
 type RendererOptions = Omit<CanvasRendererOptions, "container">
 
 export interface ConnectOptions extends RendererOptions {
-  url: string
+  /** Existing MultiplexerConnection to use */
+  connection: MultiplexerConnection
+  /** Terminal ID to subscribe to */
+  id: string
   container: HTMLElement | string
-  /** Namespace for the multiplexer connection. If provided with ids, uses multiplexer endpoint. */
-  namespace?: string
-  /** Terminal IDs to subscribe to. If provided with namespace, uses multiplexer endpoint. */
-  ids?: string[]
   /** Whether the terminal should be focused initially (default: true) */
   focused?: boolean
   onConnect?: () => void
   onDisconnect?: () => void
-  /** Called when an upstream closes (multiplexer mode only) */
+  /** Called when an upstream closes */
   onUpstreamClosed?: (id: string) => void
   onError?: (error: Error) => void
 }
@@ -32,10 +32,9 @@ export interface TerminalConnection {
 
 export function connectTerminal(options: ConnectOptions): TerminalConnection {
   const {
-    url,
+    connection,
+    id,
     container: containerOption,
-    namespace,
-    ids,
     focused: initialFocused = true,
     onConnect,
     onDisconnect,
@@ -43,10 +42,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     onError,
     ...rendererOptions
   } = options
-
-  // Multiplexer mode: when both namespace and ids are provided
-  const useMultiplexer = namespace !== undefined && ids !== undefined && ids.length > 0
-  const primaryId = useMultiplexer ? ids[0] : undefined
 
   // Resolve container
   const container =
@@ -56,147 +51,89 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     throw new Error(`Container not found: ${containerOption}`)
   }
 
-  // WebSocket reference (set after creation)
-  let ws: WebSocket
-
-  // Send helper - wraps messages in multiplexed format when using multiplexer
-  function send(message: ClientMessage) {
-    if (ws?.readyState === WebSocket.OPEN) {
-      if (useMultiplexer && primaryId) {
-        const wrapped: MultiplexedOutgoing = { id: primaryId, data: JSON.stringify(message) }
-        ws.send(JSON.stringify(wrapped))
-      } else {
-        ws.send(JSON.stringify(message))
-      }
-    }
-  }
-
   // Create renderer
   const renderer = new CanvasRenderer({
     container,
+    focused: initialFocused,
     ...rendererOptions,
   })
 
   // Get initial size
   const { cols, rows } = renderer.getSize()
 
-  // Create WebSocket connection
-  const wsUrl = new URL(url)
-  if (useMultiplexer && namespace && ids) {
-    wsUrl.pathname = wsUrl.pathname.replace(/\/?$/, "/multiplexer")
-    wsUrl.searchParams.set("namespace", namespace)
-    for (const id of ids) {
-      wsUrl.searchParams.append("id", id)
+  // Send helper
+  function send(message: ClientMessage) {
+    connection.send(id, message)
+  }
+
+  // Handle incoming messages
+  function handleMessage(message: ServerMessage) {
+    switch (message.type) {
+      case "full":
+        renderer.renderFull(message.data)
+        break
+
+      case "diff":
+        renderer.applyDiff(message.changes)
+        break
+
+      case "cursor":
+        renderer.updateCursor(message.x, message.y, message.visible)
+        break
+
+      case "selection":
+        renderer.setSelection(message.anchor, message.focus)
+        break
+
+      case "selection-clear":
+        renderer.clearSelection()
+        break
+
+      case "error":
+        console.error("[opentui/web] Server error:", message.message)
+        onError?.(new Error(message.message))
+        break
     }
   }
-  wsUrl.searchParams.set("cols", String(cols))
-  wsUrl.searchParams.set("rows", String(rows))
 
-  ws = new WebSocket(wsUrl.toString())
+  // Subscribe to events for our terminal ID
+  const unsubscribe = connection.subscribeToId(id, (event) => {
+    switch (event.type) {
+      case "data":
+        handleMessage(event.message)
+        break
+      case "upstream_closed":
+        console.log(`[opentui/web] Upstream closed: ${event.id}`)
+        onUpstreamClosed?.(event.id)
+        break
+      case "upstream_connected":
+        console.log(`[opentui/web] Upstream connected: ${event.id}`)
+        break
+      case "upstream_discovered":
+        console.log(`[opentui/web] Upstream discovered: ${event.id}`)
+        break
+      case "upstream_error":
+        console.error(`[opentui/web] Upstream error: ${event.id}`, event.error)
+        onError?.(new Error(event.error?.message ?? "Upstream error"))
+        break
+    }
+  })
 
-  // Handle WebSocket events
-  ws.onopen = () => {
-    console.log("[opentui/web] Connected to server")
+  // Subscribe to connection state changes
+  const unsubscribeGlobal = connection.subscribe((event) => {
+    // We only care about connect/disconnect at the connection level
+    if (event.type === "upstream_connected" && event.id === id) {
+      onConnect?.()
+    }
+  })
+
+  // If connection is already connected, send initial resize
+  if (connection.connected) {
     onConnect?.()
-
-    // Send initial resize
     send({ type: "resize", cols, rows })
   }
 
-  ws.onclose = () => {
-    console.log("[opentui/web] Disconnected from server")
-    onDisconnect?.()
-  }
-
-  ws.onerror = (event) => {
-    console.error("[opentui/web] WebSocket error:", event)
-    let errorMessage = "WebSocket error"
-    if ('message' in event && typeof (event as any).message === 'string') {
-      errorMessage += ": " + (event as any).message
-    }
-    if ('type' in event) {
-      errorMessage += ` (event type: ${(event as any).type})`
-    }
-    if ('currentTarget' in event && (event as any).currentTarget?.url) {
-      errorMessage += ` (url: ${(event as any).currentTarget.url})`
-    }
-    onError?.(new Error(errorMessage))
-  }
-
-  ws.onmessage = (event) => {
-    try {
-      let message: ServerMessage
-
-      if (useMultiplexer) {
-        const multiplexed = JSON.parse(event.data) as MultiplexedIncoming
-
-        // Handle lifecycle events
-        if ("event" in multiplexed) {
-          switch (multiplexed.event) {
-            case "upstream_closed":
-              console.log(`[opentui/web] Upstream closed: ${multiplexed.id}`)
-              onUpstreamClosed?.(multiplexed.id)
-              break
-            case "upstream_connected":
-              console.log(`[opentui/web] Upstream connected: ${multiplexed.id}`)
-              break
-            case "upstream_discovered":
-              console.log(`[opentui/web] Upstream discovered: ${multiplexed.id}`)
-              break
-            case "upstream_error":
-              console.error(`[opentui/web] Upstream error: ${multiplexed.id}`, multiplexed.error)
-              onError?.(new Error(multiplexed.error?.message ?? "Upstream error"))
-              break
-          }
-          return
-        }
-
-        // Handle data messages - only process messages for our primary terminal
-        if (multiplexed.id !== primaryId) {
-          return
-        }
-
-        message = JSON.parse(multiplexed.data) as ServerMessage
-      } else {
-        // Direct mode - no unwrapping needed
-        message = JSON.parse(event.data) as ServerMessage
-      }
-
-      switch (message.type) {
-        case "full":
-          renderer.renderFull(message.data)
-          break
-
-        case "diff":
-          renderer.applyDiff(message.changes)
-          break
-
-        case "cursor":
-          renderer.updateCursor(message.x, message.y, message.visible)
-          break
-
-        case "selection":
-          renderer.setSelection(message.anchor, message.focus)
-          break
-
-        case "selection-clear":
-          renderer.clearSelection()
-          break
-
-        case "error":
-          console.error("[opentui/web] Server error:", message.message)
-          onError?.(new Error(message.message))
-          break
-      }
-    } catch (error) {
-      console.error("[opentui/web] Failed to parse message:", error)
-    }
-  }
-
   // Create hidden textarea for capturing text input
-  // This is how terminal emulators (xterm.js, hterm) handle keyboard input correctly.
-  // The browser/OS handles all keyboard layout complexities (AltGr, dead keys, IME, etc.)
-  // and we just receive the final characters via the 'input' event.
   const hiddenTextarea = document.createElement("textarea")
   hiddenTextarea.className = "opentui-input"
   hiddenTextarea.setAttribute("autocomplete", "off")
@@ -229,8 +166,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     isComposing = false
   })
 
-  // Handle text input - this receives properly processed characters from the OS
-  // (handles AltGr+ò → @ on Italian keyboard, dead keys, IME, etc.)
+  // Handle text input
   const handleInput = (e: Event) => {
     if (isComposing) return
 
@@ -238,7 +174,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     const data = inputEvent.data
 
     if (data) {
-      // Send each character as a key event
       for (const char of data) {
         send({
           type: "key",
@@ -248,52 +183,29 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       }
     }
 
-    // Clear the textarea for next input
     hiddenTextarea.value = ""
   }
 
   hiddenTextarea.addEventListener("input", handleInput)
 
-  // Handle special keys via keydown (arrows, function keys, Ctrl combos, etc.)
-  // These don't produce text input events
+  // Handle special keys via keydown
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Only handle events from our hidden textarea
-    if (e.target !== hiddenTextarea) {
-      return
-    }
+    if (e.target !== hiddenTextarea) return
 
-    // Ignore modifier-only key presses
     const modifierOnlyKeys = ["Alt", "Control", "Shift", "Meta", "CapsLock", "NumLock", "ScrollLock"]
-    if (modifierOnlyKeys.includes(e.key)) {
-      return
-    }
+    if (modifierOnlyKeys.includes(e.key)) return
 
-    // Don't interfere with IME composition
-    if (isComposing) {
-      return
-    }
+    if (isComposing) return
 
-    // Keys that produce text input are handled by the 'input' event
-    // Only handle special keys here
-    const isSpecialKey =
-      e.key.length > 1 || // Named keys like "Enter", "Backspace", "ArrowUp"
-      e.ctrlKey || // Ctrl+key combos
-      e.metaKey // Cmd/Win+key combos
+    const isSpecialKey = e.key.length > 1 || e.ctrlKey || e.metaKey
 
-    if (!isSpecialKey) {
-      // Let the 'input' event handle regular character input
-      return
-    }
+    if (!isSpecialKey) return
 
-    // Prevent default for special keys we handle
     const isFKey = e.key.startsWith("F") && e.key.length <= 3 && !isNaN(Number(e.key.slice(1)))
     if (!isFKey && !e.metaKey) {
       e.preventDefault()
     }
 
-    // Map browser modifiers to terminal modifiers:
-    // Browser altKey (Alt/Option) → Terminal meta
-    // Browser metaKey (Cmd/Win) → Terminal super
     send({
       type: "key",
       key: e.key,
@@ -337,14 +249,12 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     send({ type: "mouse", action: "up", x, y, button: e.button })
   }
 
-  // Coalesce wheel events within a single animation frame
   let scrollAccumulator = 0
   let scrollPending: { x: number; y: number } | null = null
 
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault()
 
-    // Convert to lines based on deltaMode
     let deltaLines: number
     switch (e.deltaMode) {
       case WheelEvent.DOM_DELTA_LINE:
@@ -356,7 +266,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
         break
       }
       default: {
-        // DOM_DELTA_PIXEL - use renderer's actual cell height
         deltaLines = e.deltaY / renderer.metrics.cellHeight
         break
       }
@@ -364,14 +273,13 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
     scrollAccumulator += deltaLines
 
-    // Batch all wheel events within one animation frame into a single message
     if (!scrollPending) {
       scrollPending = getTerminalCoords(e)
       requestAnimationFrame(() => {
         const lines = Math.trunc(scrollAccumulator)
         if (lines !== 0) {
           send({ type: "scroll", x: scrollPending!.x, y: scrollPending!.y, lines })
-          scrollAccumulator -= lines // keep fractional remainder
+          scrollAccumulator -= lines
         }
         scrollPending = null
       })
@@ -387,6 +295,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
   // Focus management
   const setFocused = (focused: boolean) => {
+    renderer.setFocused(focused)
     if (focused) {
       hiddenTextarea.focus()
     } else {
@@ -394,7 +303,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   }
 
-  // Apply initial focus
   if (initialFocused) {
     hiddenTextarea.focus()
   }
@@ -402,7 +310,9 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   return {
     send,
     disconnect: () => {
-      ws.close()
+      unsubscribe()
+      unsubscribeGlobal()
+
       hiddenTextarea.removeEventListener("keydown", handleKeyDown)
       hiddenTextarea.removeEventListener("input", handleInput)
       container.removeEventListener("mousedown", handleMouseDown)

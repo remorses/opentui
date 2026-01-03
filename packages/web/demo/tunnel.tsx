@@ -68,8 +68,8 @@ type Tab = "overview" | "diff" | "scroll" | "colors"
 function Header({ tab, spinner }: { tab: Tab; spinner: string }) {
   return (
     <box flexDirection="row" marginBottom={1}>
-      <text bold fg={theme.accent}>
-        OpenTUI Tunnel Demo {spinner}
+      <text fg={theme.accent}>
+        <strong>OpenTUI Tunnel Demo {spinner}</strong>
       </text>
       <text fg={theme.dimmed}> | </text>
       <text fg={tab === "overview" ? theme.accent : theme.dimmed}>[1] Overview</text>
@@ -254,8 +254,8 @@ function ColorsTab() {
 
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text bold fg={theme.accent}>
-        Color Palette & Text Styles
+      <text fg={theme.accent}>
+        <strong>Color Palette & Text Styles</strong>
       </text>
 
       <box flexDirection="row" gap={1} flexWrap="wrap">
@@ -270,8 +270,8 @@ function ColorsTab() {
             width={15}
             alignItems="center"
           >
-            <text fg={color.fg} bold>
-              {color.name}
+            <text fg={color.fg}>
+              <strong>{color.name}</strong>
             </text>
           </box>
         ))}
@@ -328,7 +328,7 @@ function App() {
   }, [])
 
   useKeyboard((e) => {
-    const key = e.name || e.char
+    const key = e.name
     switch (key) {
       case "1":
         setTab("overview")

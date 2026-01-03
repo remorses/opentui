@@ -1,3 +1,9 @@
+# packages/tunnel
+
+before touching packages/tunnel ALWAYS fetch curl https://gitchamber.com/repos/remorses/holocron/preview/files/cloudflare-tunnel/src/tunnel.ts?glob=**/*.ts to understand how the tunnel works
+
+
+
 # Agent Guidelines for opentui
 
 Default to using Bun instead of Node.js.

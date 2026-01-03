@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM"],
@@ -10,9 +10,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "jsx": "react-jsx",
+
     "jsxImportSource": "@opentui/react"
     // "types": ["bun-types"]
   },
   "include": ["src/**/*", "demo/**/*"],
-  "exclude": ["node_modules", "dist", "demo"]
+  "exclude": ["node_modules", "dist", ]
 }

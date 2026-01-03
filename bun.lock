@@ -134,6 +134,7 @@
         "@opentui/react": "workspace:*",
         "@opentui/tunnel": "workspace:*",
         "@types/bun": "^1.3.5",
+        "@types/react": "^19.2.7",
         "bun-types": "^1.0.0",
         "react": ">=19.0.0",
         "typescript": "^5.0.0",
