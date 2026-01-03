@@ -9,81 +9,12 @@
 
 import type { VTermData, VTermLine, VTermSpan } from "../shared/types"
 import { customGlyphDefinitions, drawPath, drawBlocks, type GlyphDefinition } from "./custom-glyphs"
+import { measureCellSize } from "./measure"
 
 const DEFAULT_BG = "#1e1e1e"
 const DEFAULT_FG = "#d4d4d4"
 const DEFAULT_FONT_SIZE = 14
 const DEFAULT_LINE_HEIGHT = 1.2
-const DEFAULT_MAX_COLS = 200
-const DEFAULT_MAX_ROWS = 200
-
-/**
- * Check which font from the font-family string is actually being rendered.
- * Uses canvas width comparison - more reliable than document.fonts.check()
- * which can return true for fonts that aren't actually installed.
- */
-function checkFontAvailability(
-  fontFamily: string,
-  fontSize: number,
-): { available: string | null; requested: string; usingFallback: boolean } {
-  const canvas = document.createElement("canvas")
-  const ctx = canvas.getContext("2d")!
-  // Use characters with varying widths across different fonts
-  const testString = "mmmmmmmmmmlli"
-
-  // Parse font family string into individual fonts
-  const fonts = fontFamily.split(",").map((f) => f.trim().replace(/^['"]|['"]$/g, ""))
-  const requested = fonts[0]
-
-  // Get baseline width with generic monospace
-  ctx.font = `${fontSize}px monospace`
-  const fallbackWidth = ctx.measureText(testString).width
-
-  // Test each font individually (not with fallback chain)
-  for (const font of fonts) {
-    if (font === "monospace" || font === "sans-serif" || font === "serif") continue
-
-    // Test font alone - if it's not available, browser uses default (not our fallback chain)
-    ctx.font = `${fontSize}px "${font}"`
-    const fontWidth = ctx.measureText(testString).width
-
-    // Also test with explicit fallback to compare
-    ctx.font = `${fontSize}px "NonExistentFont12345"`
-    const missingFontWidth = ctx.measureText(testString).width
-
-    // If this font's width differs from a missing font, it's actually installed
-    if (Math.abs(fontWidth - missingFontWidth) > 0.1) {
-      return { available: font, requested, usingFallback: font !== requested }
-    }
-  }
-
-  return { available: null, requested, usingFallback: true }
-}
-
-/** Detect the most common background color from terminal content */
-function getMostCommonBackground(data: VTermData): string {
-  const bgCounts = new Map<string, number>()
-
-  for (const line of data.lines) {
-    for (const span of line.spans) {
-      const bg = span.bg || ""
-      if (!bg || bg === "#00000000" || bg === "transparent") continue
-      const count = bgCounts.get(bg) || 0
-      bgCounts.set(bg, count + span.text.length)
-    }
-  }
-
-  let maxBg = ""
-  let maxCount = 0
-  for (const [bg, count] of bgCounts) {
-    if (count > maxCount) {
-      maxCount = count
-      maxBg = bg
-    }
-  }
-
-  return maxBg || DEFAULT_BG
-}
 
 // Style flags matching VTermStyleFlags from core
 const StyleFlags = {
@@ -97,13 +28,11 @@ const StyleFlags = {
 
 export interface CanvasRendererOptions {
   container: HTMLElement
-  maxCols?: number
-  maxRows?: number
   fontFamily?: string
   fontSize?: number
   /** Line height multiplier (default: 1.2) */
   lineHeight?: number
-  /** Font weight for normal text (default: "normal"). Can be string or number (100-900) */
+  /** Font weight for normal text (default: 500). Can be string or number (100-900) */
   fontWeight?: string | number
   /** Font weight for bold text (default: "bold"). Can be string or number (100-900) */
   fontWeightBold?: string | number
@@ -112,7 +41,6 @@ export interface CanvasRendererOptions {
   backgroundColor?: string
   textColor?: string
   devicePixelRatio?: number
-  onResize?: (size: { cols: number; rows: number }) => void
 }
 
 export interface FontMetrics {
@@ -125,13 +53,12 @@ export interface FontMetrics {
 
 export class CanvasRenderer {
   private container: HTMLElement
+  private wrapper: HTMLDivElement
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
   private textLayer: HTMLDivElement // Hidden layer for text selection
   private cursorEl: HTMLDivElement
 
-  private maxCols: number
-  private maxRows: number
   private fontSize: number
   private lineHeightMultiplier: number
   private fontFamily: string
@@ -145,18 +72,10 @@ export class CanvasRenderer {
 
   private cols: number = 80
   private rows: number = 24
-  private metrics: FontMetrics
-  private detectedBackground: string | null = null
-  private userProvidedBackground: boolean
-
-  private onResize?: (size: { cols: number; rows: number }) => void
-  private resizeTimeout: ReturnType<typeof setTimeout> | null = null
-  private boundHandleResize: () => void
+  public readonly metrics: FontMetrics
 
   constructor(options: CanvasRendererOptions) {
     this.container = options.container
-    this.maxCols = options.maxCols ?? DEFAULT_MAX_COLS
-    this.maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
     this.lineHeightMultiplier = options.lineHeight ?? DEFAULT_LINE_HEIGHT
     this.fontFamily =
@@ -166,45 +85,28 @@ export class CanvasRenderer {
     this.fontWeightBold = options.fontWeightBold ?? "bold"
     this.letterSpacing = options.letterSpacing ?? 0
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
-    this.userProvidedBackground =
-      options.backgroundColor !== undefined &&
-      options.backgroundColor !== "transparent" &&
-      options.backgroundColor !== "#00000000"
     this.textColor = options.textColor ?? DEFAULT_FG
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
-    this.onResize = options.onResize
 
     // Use 'alphabetic' baseline - most standard and predictable
     this.textBaseline = "alphabetic"
 
-    // Check font availability after fonts are loaded (handles web fonts)
-    document.fonts.ready.then(() => {
-      const fontCheck = checkFontAvailability(this.fontFamily, this.fontSize)
-      // Always log which font is being used for transparency
-      console.info(`[CanvasRenderer] Using font: "${fontCheck.available || "system monospace"}"`)
-      if (fontCheck.usingFallback) {
-        if (fontCheck.available) {
-          console.warn(
-            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using: "${fontCheck.available}"`,
-          )
-        } else {
-          console.error(
-            `[CanvasRenderer] Requested font "${fontCheck.requested}" not available, using system monospace fallback`,
-          )
-        }
-      }
+    // Measure font metrics using shared utility
+    const cellSize = measureCellSize({
+      fontSize: this.fontSize,
+      fontFamily: this.fontFamily,
+      lineHeight: this.lineHeightMultiplier,
+      letterSpacing: this.letterSpacing,
     })
+    this.metrics = this.measureFont(cellSize)
 
-    // Measure font metrics
-    this.metrics = this.measureFont()
-
-    // Calculate initial size
+    // Calculate initial size from container
     this.recalculateSize()
 
     // Create wrapper div
-    const wrapper = document.createElement("div")
-    wrapper.className = "opentui-canvas-wrapper"
-    wrapper.style.cssText = `
+    this.wrapper = document.createElement("div")
+    this.wrapper.className = "opentui-canvas-wrapper"
+    this.wrapper.style.cssText = `
       position: relative;
       width: ${this.cols * this.metrics.charWidth}px;
       height: ${this.rows * this.metrics.cellHeight}px;
@@ -245,7 +147,6 @@ export class CanvasRenderer {
       -webkit-user-select: text;
       cursor: text;
       z-index: 2;
-      /* Disable ligatures and kerning for consistent character width */
       font-variant-ligatures: none;
       font-kerning: none;
       text-rendering: optimizeSpeed;
@@ -279,30 +180,24 @@ export class CanvasRenderer {
     `
 
     // Assemble DOM
-    wrapper.appendChild(this.textLayer)
-    wrapper.appendChild(this.canvas)
-    wrapper.appendChild(this.cursorEl)
-    this.container.appendChild(wrapper)
+    this.wrapper.appendChild(this.textLayer)
+    this.wrapper.appendChild(this.canvas)
+    this.wrapper.appendChild(this.cursorEl)
+    this.container.appendChild(this.wrapper)
 
-    // Inject styles
+    // Inject scoped styles
     this.injectStyles()
-
-    // Setup resize listener
-    this.boundHandleResize = this.handleResize.bind(this)
-    window.addEventListener("resize", this.boundHandleResize)
 
     // Initial clear
     this.clear()
   }
 
-  private measureFont(): FontMetrics {
+  private measureFont(cellSize: { width: number; height: number }): FontMetrics {
     const canvas = document.createElement("canvas")
     const ctx = canvas.getContext("2d")!
     ctx.font = `${this.fontSize}px ${this.fontFamily}`
 
     const metrics = ctx.measureText("M")
-    // Use exact width (no rounding) to match HTML text layer for selection alignment
-    const charWidth = metrics.width + this.letterSpacing
 
     // Use actualBoundingBox for accurate height, fallback to fontSize-based estimate
     const ascent = metrics.actualBoundingBoxAscent ?? this.fontSize * 0.8
@@ -311,47 +206,32 @@ export class CanvasRenderer {
     // Natural character height (like xterm.js scaledCharHeight)
     const charHeight = Math.ceil(ascent + descent)
 
-    // Cell height with line height applied (like xterm.js scaledCellHeight)
-    const cellHeight = Math.ceil(this.fontSize * this.lineHeightMultiplier)
+    // Cell height from measurement utility
+    const cellHeight = cellSize.height
 
-    // Vertical centering offset (like xterm.js scaledCharTop)
-    // This centers the natural character height within the taller cell
+    // Vertical centering offset
     const charTop = this.lineHeightMultiplier === 1 ? 0 : Math.round((cellHeight - charHeight) / 2)
 
-    // For "alphabetic" baseline, position so text is vertically centered:
-    // - charTop = top padding = (cellHeight - charHeight) / 2
-    // - baseline position = charTop + ascent (baseline is ascent pixels from top of text)
+    // For "alphabetic" baseline, position so text is vertically centered
     const baseline = Math.round(charTop + ascent)
 
     return {
-      charWidth,
+      charWidth: cellSize.width,
       cellHeight,
       baseline,
     }
   }
 
   private recalculateSize(): void {
-    const pageCols = Math.floor(window.innerWidth / this.metrics.charWidth)
-    const pageRows = Math.floor(window.innerHeight / this.metrics.cellHeight)
+    const containerWidth = this.container.clientWidth
+    const containerHeight = this.container.clientHeight
 
-    this.cols = Math.min(this.maxCols, pageCols)
-    this.rows = Math.min(this.maxRows, pageRows)
-  }
+    this.cols = Math.floor(containerWidth / this.metrics.charWidth)
+    this.rows = Math.floor(containerHeight / this.metrics.cellHeight)
 
-  private handleResize(): void {
-    if (this.resizeTimeout) {
-      clearTimeout(this.resizeTimeout)
-    }
-    this.resizeTimeout = setTimeout(() => {
-      const oldCols = this.cols
-      const oldRows = this.rows
-      this.recalculateSize()
-
-      if (oldCols !== this.cols || oldRows !== this.rows) {
-        this.updateSize()
-        this.onResize?.({ cols: this.cols, rows: this.rows })
-      }
-    }, 10)
+    // Ensure at least 1x1
+    this.cols = Math.max(1, this.cols)
+    this.rows = Math.max(1, this.rows)
   }
 
   private updateSize(): void {
@@ -359,11 +239,8 @@ export class CanvasRenderer {
     const height = this.rows * this.metrics.cellHeight
 
     // Update wrapper
-    const wrapper = this.canvas.parentElement
-    if (wrapper) {
-      wrapper.style.width = `${width}px`
-      wrapper.style.height = `${height}px`
-    }
+    this.wrapper.style.width = `${width}px`
+    this.wrapper.style.height = `${height}px`
 
     // Update canvas
     this.canvas.style.width = `${width}px`
@@ -375,11 +252,18 @@ export class CanvasRenderer {
     this.clear()
   }
 
+  /** Recalculate size from container and update. Call this after container resizes. */
+  resize(): { cols: number; rows: number } {
+    this.recalculateSize()
+    this.updateSize()
+    return { cols: this.cols, rows: this.rows }
+  }
+
   private injectStyles(): void {
-    if (document.getElementById("opentui-canvas-styles")) return
+    // Check if styles already exist in this container's scope
+    if (this.wrapper.querySelector("style")) return
 
     const style = document.createElement("style")
-    style.id = "opentui-canvas-styles"
     style.textContent = `
       .opentui-text-layer::selection {
         background-color: rgba(100, 150, 255, 0.3);
@@ -391,7 +275,7 @@ export class CanvasRenderer {
         50% { opacity: 0; }
       }
     `
-    document.head.appendChild(style)
+    this.wrapper.appendChild(style)
   }
 
   private clear(): void {
@@ -412,25 +296,6 @@ export class CanvasRenderer {
   renderFull(data: VTermData): void {
     this.cols = data.cols
     this.rows = data.rows
-
-    // Determine background color (only once)
-    if (!this.detectedBackground) {
-      if (this.userProvidedBackground) {
-        // Use user-provided background
-        this.detectedBackground = this.backgroundColor
-      } else {
-        // Auto-detect from terminal content
-        this.detectedBackground = getMostCommonBackground(data)
-        this.backgroundColor = this.detectedBackground
-      }
-
-      // Apply to document body and wrapper for seamless background
-      document.body.style.backgroundColor = this.detectedBackground
-      const wrapper = this.canvas.parentElement
-      if (wrapper) {
-        wrapper.style.backgroundColor = this.detectedBackground
-      }
-    }
 
     this.updateSize()
 
@@ -662,13 +527,6 @@ export class CanvasRenderer {
   }
 
   destroy(): void {
-    window.removeEventListener("resize", this.boundHandleResize)
-    if (this.resizeTimeout) {
-      clearTimeout(this.resizeTimeout)
-    }
-    const wrapper = this.canvas.parentElement
-    if (wrapper) {
-      this.container.removeChild(wrapper)
-    }
+    this.container.removeChild(this.wrapper)
   }
 }

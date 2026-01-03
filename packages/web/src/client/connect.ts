@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, VTermData, LineDiff } from "../shared/types"
+import type { ClientMessage, ServerMessage, MultiplexedIncoming, MultiplexedOutgoing } from "../shared/types"
 import { TerminalRenderer, type TerminalRendererOptions } from "./html-renderer"
 import { CanvasRenderer, type CanvasRendererOptions } from "./canvas-renderer"
 
@@ -7,29 +7,43 @@ type BaseRendererOptions = Omit<TerminalRendererOptions, "container"> & Omit<Can
 export interface ConnectOptions extends BaseRendererOptions {
   url: string
   container: HTMLElement | string
-  /** Use canvas renderer with custom glyph support for pixel-perfect box-drawing (default: false) */
+  /** Namespace for the multiplexer connection. If provided with ids, uses multiplexer endpoint. */
+  namespace?: string
+  /** Terminal IDs to subscribe to. If provided with namespace, uses multiplexer endpoint. */
+  ids?: string[]
+  /** Use canvas renderer with custom glyph support for pixel-perfect box-drawing (default: true) */
   useCanvas?: boolean
   onConnect?: () => void
   onDisconnect?: () => void
+  /** Called when an upstream closes (multiplexer mode only) */
+  onUpstreamClosed?: (id: string) => void
   onError?: (error: Error) => void
 }
 
 export interface TerminalConnection {
   send: (message: ClientMessage) => void
   disconnect: () => void
-  resize: () => void
+  /** Recalculate size from container and notify server. Call after container resizes. */
+  resize: () => { cols: number; rows: number }
 }
 
 export function connectTerminal(options: ConnectOptions): TerminalConnection {
   const {
     url,
     container: containerOption,
+    namespace,
+    ids,
     useCanvas = true,
     onConnect,
     onDisconnect,
+    onUpstreamClosed,
     onError,
     ...rendererOptions
   } = options
+
+  // Multiplexer mode: when both namespace and ids are provided
+  const useMultiplexer = namespace !== undefined && ids !== undefined && ids.length > 0
+  const primaryId = useMultiplexer ? ids[0] : undefined
 
   // Resolve container
   const container =
@@ -42,28 +56,27 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   // WebSocket reference (set after creation)
   let ws: WebSocket
 
-  // Send helper
+  // Send helper - wraps messages in multiplexed format when using multiplexer
   function send(message: ClientMessage) {
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message))
+      if (useMultiplexer && primaryId) {
+        const wrapped: MultiplexedOutgoing = { id: primaryId, data: JSON.stringify(message) }
+        ws.send(JSON.stringify(wrapped))
+      } else {
+        ws.send(JSON.stringify(message))
+      }
     }
   }
 
-  // Create renderer with resize callback
+  // Create renderer
   const renderer = useCanvas
     ? new CanvasRenderer({
         container,
         ...rendererOptions,
-        onResize: (size) => {
-          send({ type: "resize", cols: size.cols, rows: size.rows })
-        },
       })
     : new TerminalRenderer({
         container,
         ...rendererOptions,
-        onResize: (size) => {
-          send({ type: "resize", cols: size.cols, rows: size.rows })
-        },
       })
 
   // Get initial size
@@ -71,6 +84,13 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
   // Create WebSocket connection
   const wsUrl = new URL(url)
+  if (useMultiplexer && namespace && ids) {
+    wsUrl.pathname = wsUrl.pathname.replace(/\/?$/, "/multiplexer")
+    wsUrl.searchParams.set("namespace", namespace)
+    for (const id of ids) {
+      wsUrl.searchParams.append("id", id)
+    }
+  }
   wsUrl.searchParams.set("cols", String(cols))
   wsUrl.searchParams.set("rows", String(rows))
 
@@ -92,12 +112,57 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
   ws.onerror = (event) => {
     console.error("[opentui/web] WebSocket error:", event)
-    onError?.(new Error("WebSocket error"))
+    let errorMessage = "WebSocket error"
+    if ('message' in event && typeof (event as any).message === 'string') {
+      errorMessage += ": " + (event as any).message
+    }
+    if ('type' in event) {
+      errorMessage += ` (event type: ${(event as any).type})`
+    }
+    if ('currentTarget' in event && (event as any).currentTarget?.url) {
+      errorMessage += ` (url: ${(event as any).currentTarget.url})`
+    }
+    onError?.(new Error(errorMessage))
   }
 
   ws.onmessage = (event) => {
     try {
-      const message = JSON.parse(event.data) as ServerMessage
+      let message: ServerMessage
+
+      if (useMultiplexer) {
+        const multiplexed = JSON.parse(event.data) as MultiplexedIncoming
+
+        // Handle lifecycle events
+        if ("event" in multiplexed) {
+          switch (multiplexed.event) {
+            case "upstream_closed":
+              console.log(`[opentui/web] Upstream closed: ${multiplexed.id}`)
+              onUpstreamClosed?.(multiplexed.id)
+              break
+            case "upstream_connected":
+              console.log(`[opentui/web] Upstream connected: ${multiplexed.id}`)
+              break
+            case "upstream_discovered":
+              console.log(`[opentui/web] Upstream discovered: ${multiplexed.id}`)
+              break
+            case "upstream_error":
+              console.error(`[opentui/web] Upstream error: ${multiplexed.id}`, multiplexed.error)
+              onError?.(new Error(multiplexed.error?.message ?? "Upstream error"))
+              break
+          }
+          return
+        }
+
+        // Handle data messages - only process messages for our primary terminal
+        if (multiplexed.id !== primaryId) {
+          return
+        }
+
+        message = JSON.parse(multiplexed.data) as ServerMessage
+      } else {
+        // Direct mode - no unwrapping needed
+        message = JSON.parse(event.data) as ServerMessage
+      }
 
       switch (message.type) {
         case "full":
@@ -265,8 +330,9 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       renderer.destroy()
     },
     resize: () => {
-      const { cols, rows } = renderer.getSize()
+      const { cols, rows } = renderer.resize()
       send({ type: "resize", cols, rows })
+      return { cols, rows }
     },
   }
 }

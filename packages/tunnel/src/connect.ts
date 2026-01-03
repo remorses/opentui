@@ -13,6 +13,13 @@ export interface TunnelOptions {
   tunnelId?: string
 
   /**
+   * Namespace for grouping multiple tunnels.
+   * Defaults to tunnelId if not provided.
+   * Multiple tunnels can share a namespace for multiplexed connections.
+   */
+  namespace?: string
+
+  /**
    * Tunnel WebSocket URL.
    * Defaults to wss://opentui.net/_tunnel
    */
@@ -57,7 +64,10 @@ export interface TunnelInfo {
   /** Tunnel session ID */
   tunnelId: string
 
-  /** WebSocket URL for custom client connections */
+  /** Namespace for multiplexed connections */
+  namespace: string
+
+  /** WebSocket URL for custom client connections (multiplexer endpoint) */
   wsUrl: string
 
   /** HTML page URL (if htmlUrl is configured) */
@@ -111,12 +121,16 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
     rows = 24,
   } = options
 
-  const wsUrl = `${tunnelUrl}/upstream?id=${tunnelId}`
-  const fullHtmlUrl = htmlUrl ? `${htmlUrl}/s/${tunnelId}` : null
+  // Namespace defaults to tunnelId
+  const namespace = options.namespace ?? tunnelId
+
+  const wsUrl = `${tunnelUrl}/upstream?namespace=${namespace}&id=${tunnelId}`
+  const fullHtmlUrl = htmlUrl ? `${htmlUrl}/s/${namespace}/${tunnelId}` : null
 
   const info: TunnelInfo = {
     tunnelId,
-    wsUrl: `${tunnelUrl}/downstream?id=${tunnelId}`,
+    namespace,
+    wsUrl: `${tunnelUrl}/multiplexer?namespace=${namespace}&id=${tunnelId}`,
     htmlUrl: fullHtmlUrl,
   }
 
@@ -238,14 +252,30 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
       }
     }
 
-    ws.onerror = () => {
-      const error = new Error("WebSocket error")
-      console.error("[opentui/tunnel] WebSocket error")
+    ws.onerror = (event) => {
+      // Gather more info from event and WebSocket state
+      let details = "";
+      if (ws) {
+        details += ` readyState: ${ws.readyState}`;
+        if (typeof ws.url === "string") details += ` url: ${ws.url}`;
+      }
+      if (event && (event instanceof ErrorEvent)) {
+        details += ` message: ${event.message}`;
+        if (event.filename) details += ` filename: ${event.filename}`;
+        if (event.lineno) details += ` lineno: ${event.lineno}`;
+        if (event.colno) details += ` colno: ${event.colno}`;
+        if (event.error) details += ` error: ${event.error}`;
+      }
+
+      const error = new Error("WebSocket error" + (details ? ` (${details.trim()})` : ""));
+
+      console.error("[opentui/tunnel] WebSocket error", details);
       if (!isConnected) {
         reject(error)
       } else {
         onError?.(error)
       }
+
     }
 
     function disconnect() {

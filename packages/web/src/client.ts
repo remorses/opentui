@@ -3,6 +3,15 @@ export { connectTerminal, type ConnectOptions, type TerminalConnection } from ".
 export { TerminalRenderer, type TerminalRendererOptions } from "./client/html-renderer"
 export { CanvasRenderer, type CanvasRendererOptions } from "./client/canvas-renderer"
 
+// Measurement utilities for layout calculations
+export {
+  measureCellSize,
+  calculateGridSize,
+  findBestFontSize,
+  type MeasureCellOptions,
+  type CellSize,
+} from "./client/measure"
+
 // Custom glyph utilities (for advanced usage)
 export { customGlyphDefinitions, hasCustomGlyph, getCustomGlyph, drawPath, drawBlocks } from "./client/custom-glyphs"
 export type { GlyphDefinition } from "./client/custom-glyphs"

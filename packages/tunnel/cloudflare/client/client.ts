@@ -1,23 +1,31 @@
 import { connectTerminal } from "@opentui/web/client"
 
-// Extract tunnelId from URL path: /s/{tunnelId}
-const tunnelId = window.location.pathname.split("/").pop() // Take last segment as tunnelId
+// Extract namespace and tunnelId from URL path: /s/{namespace}/{tunnelId}
+const pathParts = window.location.pathname.split("/").filter(Boolean)
+// pathParts = ["s", namespace, tunnelId]
+const namespace = pathParts[1]
+const tunnelId = pathParts[2]
 
-if (!tunnelId) {
+if (!namespace || !tunnelId) {
   document.getElementById("terminal")!.innerHTML = `
     <div style="color: #f85149; font-family: system-ui; text-align: center; padding-top: 40vh;">
       <h1>Invalid tunnel URL</h1>
-      <p>Missing tunnel ID in path</p>
+      <p>Expected format: /s/{namespace}/{tunnelId}</p>
     </div>
   `
 } else {
-  const wsUrl = `wss://${window.location.host}/_tunnel/downstream?id=${tunnelId}`
+  // Setup container to fill viewport
+  const container = document.getElementById("terminal")!
+  document.body.style.cssText = "margin: 0; background: #1e1e1e; overflow: hidden;"
+  container.style.cssText = "width: 100vw; height: 100vh;"
 
-  connectTerminal({
+  const wsUrl = `wss://${window.location.host}/_tunnel`
+
+  const connection = connectTerminal({
     url: wsUrl,
-    container: "#terminal",
-    maxCols: 120,
-    maxRows: 40,
+    namespace,
+    ids: [tunnelId],
+    container,
     useCanvas: true,
     fontFamily: "Consolas, monospace",
     fontSize: 14,
@@ -25,12 +33,12 @@ if (!tunnelId) {
     letterSpacing: 0,
     fontWeight: 500,
     fontWeightBold: 700,
+    backgroundColor: "#1e1e1e",
     onConnect: () => {
-      console.log("[opentui] Connected to tunnel:", tunnelId)
+      console.log("[opentui] Connected to tunnel:", tunnelId, "namespace:", namespace)
     },
     onDisconnect: () => {
       console.log("[opentui] Disconnected from tunnel")
-      // Show reconnecting message
       const terminal = document.getElementById("terminal")
       if (terminal) {
         terminal.innerHTML = `
@@ -38,7 +46,19 @@ if (!tunnelId) {
             <h1>Reconnecting...</h1>
           </div>
         `
-        // Reload after 2 seconds to reconnect
+        setTimeout(() => window.location.reload(), 2000)
+      }
+    },
+    onUpstreamClosed: (id) => {
+      console.log("[opentui] Upstream closed:", id)
+      const terminal = document.getElementById("terminal")
+      if (terminal) {
+        terminal.innerHTML = `
+          <div style="color: #f85149; font-family: system-ui; text-align: center; padding-top: 40vh;">
+            <h1>Tunnel closed</h1>
+            <p>The upstream application disconnected.</p>
+          </div>
+        `
         setTimeout(() => window.location.reload(), 2000)
       }
     },
@@ -54,5 +74,10 @@ if (!tunnelId) {
         `
       }
     },
+  })
+
+  // Handle window resize
+  window.addEventListener("resize", () => {
+    connection.resize()
   })
 }

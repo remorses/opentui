@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun"
 import { SessionManager, type Session } from "./session"
-import type { ClientMessage } from "../shared/types"
+import type { ClientMessage, MultiplexedIncoming, MultiplexedOutgoing } from "../shared/types"
 
 export interface OpentuiWebSocketOptions {
   maxCols?: number
@@ -11,6 +11,8 @@ export interface OpentuiWebSocketOptions {
 
 interface WebSocketData {
   sessionId: string
+  tunnelId: string
+  namespace: string
   query: URLSearchParams
 }
 
@@ -49,22 +51,28 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
   return {
     /**
      * Fetch handler that upgrades WebSocket connections.
-     * Compose with your own fetch handler if needed.
+     * Handles /multiplexer endpoint with namespace and id query params.
      */
     fetch(req: Request, server: { upgrade: (req: Request, options: { data: WebSocketData }) => boolean }) {
       const url = new URL(req.url)
 
-      // Only handle /ws path for WebSocket upgrade
-      if (url.pathname === "/ws") {
+      // Handle /multiplexer path for WebSocket upgrade (tunnel-style)
+      if (url.pathname === "/multiplexer") {
         const query = url.searchParams
+        const namespace = query.get("namespace")
+        const tunnelId = query.get("id")
         const upgradeHeader = req.headers.get("upgrade")
 
         if (upgradeHeader !== "websocket") {
           return new Response("Expected WebSocket upgrade", { status: 400 })
         }
 
+        if (!namespace || !tunnelId) {
+          return new Response("namespace and id query params required", { status: 400 })
+        }
+
         const upgraded = server.upgrade(req, {
-          data: { sessionId: "", query },
+          data: { sessionId: "", tunnelId, namespace, query },
         })
 
         if (upgraded) {
@@ -81,11 +89,23 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
       async open(ws: ServerWebSocket<WebSocketData>) {
         try {
           const query = ws.data.query || new URLSearchParams()
-          const sessionId = await sessionManager.createSession(ws as any, query)
+          const tunnelId = ws.data.tunnelId
+
+          // Create a wrapped send function that adds {id, data} envelope
+          const wrappedWs = {
+            send: (message: string) => {
+              const wrapped: MultiplexedOutgoing = { id: tunnelId, data: message }
+              ws.send(JSON.stringify(wrapped))
+            },
+            close: ws.close.bind(ws),
+            readyState: ws.readyState,
+          }
+
+          const sessionId = await sessionManager.createSession(wrappedWs as any, query)
           ws.data.sessionId = sessionId
           Bun.write(
             Bun.stderr,
-            `[opentui/web] Session ${sessionId} connected (${sessionManager.getSessionCount()} active)\n`,
+            `[opentui/web] Session ${sessionId} connected (tunnel: ${tunnelId}, ${sessionManager.getSessionCount()} active)\n`,
           )
         } catch (error) {
           console.error(`[opentui/web] Error creating session:`, error)
@@ -94,12 +114,25 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
 
       message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
         try {
-          const data = JSON.parse(String(message)) as ClientMessage
+          // Unwrap multiplexed message: {id, data}
+          const multiplexed = JSON.parse(String(message)) as MultiplexedIncoming
+          
+          // Check if it's a data message (not an event)
+          if (!("data" in multiplexed)) {
+            return
+          }
+
+          // Verify the id matches our tunnel
+          if (multiplexed.id !== ws.data.tunnelId) {
+            return
+          }
+
+          const data = JSON.parse(multiplexed.data) as ClientMessage
           const sessionId = ws.data.sessionId
           if (!sessionId) {
             Bun.write(
               Bun.stderr,
-              `[opentui/web] Message received before session created, ignoring: ${String(message).slice(0, 100)}\n`,
+              `[opentui/web] Message received before session created, ignoring\n`,
             )
             return
           }

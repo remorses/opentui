@@ -1,70 +1,8 @@
 import type { VTermData, VTermLine, VTermSpan, LineDiff } from "../shared/types"
+import { measureCellSize } from "./measure"
 
 const DEFAULT_BG = "#1e1e1e"
 const DEFAULT_FONT_SIZE = 14
-const DEFAULT_MAX_COLS = 200
-const DEFAULT_MAX_ROWS = 200
-
-/** Font metrics for calculating terminal dimensions */
-export interface TerminalMetrics {
-  charWidth: number
-  lineHeight: number
-}
-
-/** Get font metrics for a given font size */
-export function getTerminalMetrics(options?: { fontSize?: number }): TerminalMetrics {
-  const fontSize = options?.fontSize ?? DEFAULT_FONT_SIZE
-  return {
-    charWidth: fontSize * 0.6,
-    lineHeight: fontSize * 1.2,
-  }
-}
-
-/** Calculate cols/rows that fit in given pixel dimensions */
-export function getTerminalSize(options: {
-  width: number
-  height: number
-  fontSize?: number
-  maxCols?: number
-  maxRows?: number
-}): { cols: number; rows: number } {
-  const {
-    width,
-    height,
-    fontSize = DEFAULT_FONT_SIZE,
-    maxCols = DEFAULT_MAX_COLS,
-    maxRows = DEFAULT_MAX_ROWS,
-  } = options
-  const metrics = getTerminalMetrics({ fontSize })
-  return {
-    cols: Math.min(Math.floor(width / metrics.charWidth), maxCols),
-    rows: Math.min(Math.floor(height / metrics.lineHeight), maxRows),
-  }
-}
-
-function getMostCommonBackground(data: VTermData): string {
-  const bgCounts = new Map<string, number>()
-
-  for (const line of data.lines) {
-    for (const span of line.spans) {
-      const bg = span.bg || ""
-      if (!bg || bg === "#00000000" || bg === "transparent") continue
-      const count = bgCounts.get(bg) || 0
-      bgCounts.set(bg, count + span.text.length)
-    }
-  }
-
-  let maxBg = ""
-  let maxCount = 0
-  for (const [bg, count] of bgCounts) {
-    if (count > maxCount) {
-      maxCount = count
-      maxBg = bg
-    }
-  }
-
-  return maxBg || DEFAULT_BG
-}
 
 // Style flags matching VTermStyleFlags from core
 const StyleFlags = {
@@ -124,17 +62,12 @@ function lineToHtml(line: VTermLine): string {
 
 export interface TerminalRendererOptions {
   container: HTMLElement
-  /** Maximum columns (default 200) */
-  maxCols?: number
-  /** Maximum rows (default 200) */
-  maxRows?: number
   fontFamily?: string
   fontSize?: number
-  /** If not provided, auto-detects from terminal content */
+  /** Line height multiplier (default: 1.2) */
+  lineHeight?: number
   backgroundColor?: string
   textColor?: string
-  /** Called when terminal size changes due to window resize */
-  onResize?: (size: { cols: number; rows: number }) => void
 }
 
 export class TerminalRenderer {
@@ -142,30 +75,33 @@ export class TerminalRenderer {
   private terminalEl: HTMLDivElement
   private lineElements: HTMLDivElement[] = []
   private cursorEl: HTMLDivElement
-  private maxCols: number
-  private maxRows: number
   private fontSize: number
+  private lineHeightMultiplier: number
   private cols: number = 80
   private rows: number = 24
-  private fixedBackground: string | null
+  private backgroundColor: string
   private fontFamily: string
-  private onResize?: (size: { cols: number; rows: number }) => void
-  private resizeTimeout: ReturnType<typeof setTimeout> | null = null
-  private boundHandleResize: () => void
+  public readonly metrics: { charWidth: number; cellHeight: number }
 
   constructor(options: TerminalRendererOptions) {
     this.container = options.container
-    this.maxCols = options.maxCols ?? DEFAULT_MAX_COLS
-    this.maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
-    this.fixedBackground = options.backgroundColor ?? null
+    this.lineHeightMultiplier = options.lineHeight ?? 1.2
+    this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
     this.fontFamily = options.fontFamily ?? "Monaco, Menlo, 'Ubuntu Mono', Consolas, monospace"
-    this.onResize = options.onResize
 
-    // Calculate initial size based on window dimensions
+    // Measure cell size
+    const cellSize = measureCellSize({
+      fontSize: this.fontSize,
+      fontFamily: this.fontFamily,
+      lineHeight: this.lineHeightMultiplier,
+    })
+    this.metrics = { charWidth: cellSize.width, cellHeight: cellSize.height }
+
+    // Calculate initial size from container
     this.recalculateSize()
 
-    // Create terminal container with computed size
+    // Create terminal container
     this.terminalEl = document.createElement("div")
     this.terminalEl.className = "opentui-terminal"
     this.updateTerminalStyles()
@@ -176,126 +112,86 @@ export class TerminalRenderer {
     this.cursorEl.style.cssText = `
       position: absolute;
       width: 1ch;
-      height: 1.2em;
+      height: ${this.metrics.cellHeight}px;
       background-color: rgba(255, 255, 255, 0.7);
       pointer-events: none;
       display: none;
+      animation: opentui-blink 1s step-end infinite;
     `
 
     this.container.appendChild(this.terminalEl)
     this.terminalEl.appendChild(this.cursorEl)
 
-    // Add global styles
+    // Inject scoped styles
     this.injectStyles()
-
-    // Setup resize listener with 10ms debounce
-    this.boundHandleResize = this.handleResize.bind(this)
-    window.addEventListener("resize", this.boundHandleResize)
   }
 
-  private recalculateSize() {
-    const metrics = getTerminalMetrics({ fontSize: this.fontSize })
+  private recalculateSize(): void {
+    const containerWidth = this.container.clientWidth
+    const containerHeight = this.container.clientHeight
 
-    // Calculate what fits on the page
-    const pageCols = Math.floor(window.innerWidth / metrics.charWidth)
-    const pageRows = Math.floor(window.innerHeight / metrics.lineHeight)
+    this.cols = Math.floor(containerWidth / this.metrics.charWidth)
+    this.rows = Math.floor(containerHeight / this.metrics.cellHeight)
 
-    // Use minimum of user's max and what fits on page
-    this.cols = Math.min(this.maxCols, pageCols)
-    this.rows = Math.min(this.maxRows, pageRows)
+    // Ensure at least 1x1
+    this.cols = Math.max(1, this.cols)
+    this.rows = Math.max(1, this.rows)
   }
 
-  private updateTerminalStyles() {
-    const metrics = getTerminalMetrics({ fontSize: this.fontSize })
-    const width = this.cols * metrics.charWidth
-    const height = this.rows * metrics.lineHeight
-    const maxWidth = this.maxCols * metrics.charWidth
-    const maxHeight = this.maxRows * metrics.lineHeight
+  private updateTerminalStyles(): void {
+    const width = this.cols * this.metrics.charWidth
+    const height = this.rows * this.metrics.cellHeight
 
     this.terminalEl.style.cssText = `
       font-family: ${this.fontFamily};
       font-size: ${this.fontSize}px;
-      line-height: 1.2;
-      background-color: ${this.fixedBackground ?? "transparent"};
+      line-height: ${this.lineHeightMultiplier};
+      background-color: ${this.backgroundColor};
       color: #ffffff;
       overflow: hidden;
       position: relative;
       width: ${width}px;
       height: ${height}px;
-      max-width: ${maxWidth}px;
-      max-height: ${maxHeight}px;
     `
   }
 
-  private handleResize() {
-    if (this.resizeTimeout) {
-      clearTimeout(this.resizeTimeout)
-    }
-    this.resizeTimeout = setTimeout(() => {
-      const oldCols = this.cols
-      const oldRows = this.rows
-      this.recalculateSize()
-
-      if (oldCols !== this.cols || oldRows !== this.rows) {
-        this.updateTerminalStyles()
-        this.onResize?.({ cols: this.cols, rows: this.rows })
-      }
-    }, 10)
+  /** Recalculate size from container and update. Call this after container resizes. */
+  resize(): { cols: number; rows: number } {
+    this.recalculateSize()
+    this.updateTerminalStyles()
+    return { cols: this.cols, rows: this.rows }
   }
 
-  private injectStyles() {
-    if (document.getElementById("opentui-styles")) return
+  private injectStyles(): void {
+    // Check if styles already exist in this container
+    if (this.terminalEl.querySelector("style")) return
 
     const style = document.createElement("style")
-    style.id = "opentui-styles"
     style.textContent = `
-      html, body {
-        overscroll-behavior: none;
-        -webkit-overflow-scrolling: auto;
-      }
-      body {
-        position: fixed;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-      }
-      .opentui-terminal {
-        -webkit-text-size-adjust: 100%;
-        text-size-adjust: 100%;
-        touch-action: none;
-      }
       .opentui-line {
         white-space: pre;
-        height: 1.2em;
+        height: ${this.metrics.cellHeight}px;
       }
       .opentui-line span {
         white-space: pre;
-      }
-      .opentui-cursor {
-        animation: opentui-blink 1s step-end infinite;
       }
       @keyframes opentui-blink {
         50% { opacity: 0; }
       }
     `
-    document.head.appendChild(style)
+    this.terminalEl.appendChild(style)
   }
 
   renderFull(data: VTermData) {
     this.cols = data.cols
     this.rows = data.rows
+    this.updateTerminalStyles()
 
-    // Auto-detect background from terminal content (only if not user-provided)
-    if (!this.fixedBackground) {
-      const bg = getMostCommonBackground(data)
-      document.body.style.backgroundColor = bg
-      this.terminalEl.style.backgroundColor = bg
-      this.fixedBackground = bg // only detect once
-    }
-
-    // Clear existing lines
+    // Clear existing lines (preserve cursor and style)
+    const style = this.terminalEl.querySelector("style")
     this.lineElements = []
     this.terminalEl.innerHTML = ""
+    if (style) this.terminalEl.appendChild(style)
     this.terminalEl.appendChild(this.cursorEl)
 
     // Render all lines
@@ -402,11 +298,7 @@ export class TerminalRenderer {
     return null
   }
 
-  destroy() {
-    window.removeEventListener("resize", this.boundHandleResize)
-    if (this.resizeTimeout) {
-      clearTimeout(this.resizeTimeout)
-    }
+  destroy(): void {
     this.container.removeChild(this.terminalEl)
   }
 }

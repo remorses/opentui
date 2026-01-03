@@ -38,3 +38,13 @@ export interface SessionInfo {
   cols: number
   rows: number
 }
+
+// Multiplexed message types (from tunnel DO)
+export type MultiplexedIncoming =
+  | { id: string; data: string }
+  | { id: string; event: "upstream_closed" }
+  | { id: string; event: "upstream_connected" }
+  | { id: string; event: "upstream_error"; error?: { message?: string; name?: string } }
+  | { id: string; event: "upstream_discovered" }
+
+export type MultiplexedOutgoing = { id: string; data: string }

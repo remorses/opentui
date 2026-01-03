@@ -2,7 +2,7 @@
  * Cloudflare Worker that serves the OpenTUI web client.
  *
  * Routes:
- * - GET /s/{tunnelId} - Serves HTML client that connects to the tunnel
+ * - GET /s/{namespace}/{tunnelId} - Serves HTML client that connects to the tunnel
  * - GET /health - Health check endpoint
  * - GET / - Redirects to GitHub
  *
@@ -13,7 +13,7 @@ import type { ExecutionContext } from "@cloudflare/workers-types"
 
 export interface Env {
   ASSETS: {
-    fetch: (request: Request) => Promise<Response>
+    fetch: (request: Request | URL | string) => Promise<Response>
   }
 }
 
@@ -42,12 +42,14 @@ export default {
       })
     }
 
-    // Serve client HTML at /s/{tunnelId}
+    // Serve client HTML at /s/{namespace}/{tunnelId}
     if (url.pathname.startsWith("/s/")) {
-      const tunnelId = url.pathname.slice(3)
+      const pathParts = url.pathname.slice(3).split("/").filter(Boolean)
+      const namespace = pathParts[0]
+      const tunnelId = pathParts[1]
 
-      if (!tunnelId || tunnelId.includes("/")) {
-        return new Response("Invalid tunnel ID", { status: 400 })
+      if (!namespace || !tunnelId) {
+        return new Response("Invalid tunnel URL. Expected format: /s/{namespace}/{tunnelId}", { status: 400 })
       }
 
       // Fetch the static HTML from assets
