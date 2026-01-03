@@ -1,18 +1,15 @@
 import type { ClientMessage, ServerMessage, MultiplexedIncoming, MultiplexedOutgoing } from "../shared/types"
-import { TerminalRenderer, type TerminalRendererOptions } from "./html-renderer"
 import { CanvasRenderer, type CanvasRendererOptions } from "./canvas-renderer"
 
-type BaseRendererOptions = Omit<TerminalRendererOptions, "container"> & Omit<CanvasRendererOptions, "container">
+type RendererOptions = Omit<CanvasRendererOptions, "container">
 
-export interface ConnectOptions extends BaseRendererOptions {
+export interface ConnectOptions extends RendererOptions {
   url: string
   container: HTMLElement | string
   /** Namespace for the multiplexer connection. If provided with ids, uses multiplexer endpoint. */
   namespace?: string
   /** Terminal IDs to subscribe to. If provided with namespace, uses multiplexer endpoint. */
   ids?: string[]
-  /** Use canvas renderer with custom glyph support for pixel-perfect box-drawing (default: true) */
-  useCanvas?: boolean
   /** Whether the terminal should be focused initially (default: true) */
   focused?: boolean
   onConnect?: () => void
@@ -39,7 +36,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     container: containerOption,
     namespace,
     ids,
-    useCanvas = true,
     focused: initialFocused = true,
     onConnect,
     onDisconnect,
@@ -76,15 +72,10 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
 
   // Create renderer
-  const renderer = useCanvas
-    ? new CanvasRenderer({
-        container,
-        ...rendererOptions,
-      })
-    : new TerminalRenderer({
-        container,
-        ...rendererOptions,
-      })
+  const renderer = new CanvasRenderer({
+    container,
+    ...rendererOptions,
+  })
 
   // Get initial size
   const { cols, rows } = renderer.getSize()
@@ -318,13 +309,10 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   // Setup mouse input
   const getTerminalCoords = (e: MouseEvent): { x: number; y: number } => {
     const rect = container.getBoundingClientRect()
-    // Get cell dimensions from renderer (works for both HTML and Canvas renderers)
-    const fontSize = (renderer as any).fontSize ?? 14
-    const charWidth = (renderer as any).metrics?.charWidth ?? fontSize * 0.6
-    const lineHeight = (renderer as any).metrics?.charHeight ?? fontSize * 1.2
+    const { charWidth, cellHeight } = renderer.metrics
 
     const x = Math.floor((e.clientX - rect.left) / charWidth)
-    const y = Math.floor((e.clientY - rect.top) / lineHeight)
+    const y = Math.floor((e.clientY - rect.top) / cellHeight)
 
     return { x: Math.max(0, x), y: Math.max(0, y) }
   }
@@ -368,9 +356,8 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
         break
       }
       default: {
-        // DOM_DELTA_PIXEL - use renderer's actual line height
-        const lineHeight = (renderer as any).metrics?.charHeight ?? 20
-        deltaLines = e.deltaY / lineHeight
+        // DOM_DELTA_PIXEL - use renderer's actual cell height
+        deltaLines = e.deltaY / renderer.metrics.cellHeight
         break
       }
     }

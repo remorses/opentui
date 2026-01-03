@@ -1,6 +1,5 @@
 // Client exports (for browser)
 export { connectTerminal, type ConnectOptions, type TerminalConnection } from "./client/connect"
-export { TerminalRenderer, type TerminalRendererOptions } from "./client/html-renderer"
 export { CanvasRenderer, type CanvasRendererOptions } from "./client/canvas-renderer"
 
 // Measurement utilities for layout calculations
