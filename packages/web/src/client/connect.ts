@@ -13,6 +13,8 @@ export interface ConnectOptions extends BaseRendererOptions {
   ids?: string[]
   /** Use canvas renderer with custom glyph support for pixel-perfect box-drawing (default: true) */
   useCanvas?: boolean
+  /** Whether the terminal should be focused initially (default: true) */
+  focused?: boolean
   onConnect?: () => void
   onDisconnect?: () => void
   /** Called when an upstream closes (multiplexer mode only) */
@@ -25,6 +27,10 @@ export interface TerminalConnection {
   disconnect: () => void
   /** Recalculate size from container and notify server. Call after container resizes. */
   resize: () => { cols: number; rows: number }
+  /** Set whether the terminal is focused for keyboard input */
+  setFocused: (focused: boolean) => void
+  /** Whether the terminal is currently focused */
+  readonly focused: boolean
 }
 
 export function connectTerminal(options: ConnectOptions): TerminalConnection {
@@ -34,6 +40,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     namespace,
     ids,
     useCanvas = true,
+    focused: initialFocused = true,
     onConnect,
     onDisconnect,
     onUpstreamClosed,
@@ -195,43 +202,115 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   }
 
-  // Setup keyboard input
+  // Create hidden textarea for capturing text input
+  // This is how terminal emulators (xterm.js, hterm) handle keyboard input correctly.
+  // The browser/OS handles all keyboard layout complexities (AltGr, dead keys, IME, etc.)
+  // and we just receive the final characters via the 'input' event.
+  const hiddenTextarea = document.createElement("textarea")
+  hiddenTextarea.className = "opentui-input"
+  hiddenTextarea.setAttribute("autocomplete", "off")
+  hiddenTextarea.setAttribute("autocorrect", "off")
+  hiddenTextarea.setAttribute("autocapitalize", "off")
+  hiddenTextarea.setAttribute("spellcheck", "false")
+  hiddenTextarea.setAttribute("tabindex", "0")
+  hiddenTextarea.style.cssText = `
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+  `
+  container.style.position = container.style.position || "relative"
+  container.appendChild(hiddenTextarea)
+
+  // Track if we're in a composition (IME input)
+  let isComposing = false
+
+  hiddenTextarea.addEventListener("compositionstart", () => {
+    isComposing = true
+  })
+
+  hiddenTextarea.addEventListener("compositionend", () => {
+    isComposing = false
+  })
+
+  // Handle text input - this receives properly processed characters from the OS
+  // (handles AltGr+ò → @ on Italian keyboard, dead keys, IME, etc.)
+  const handleInput = (e: Event) => {
+    if (isComposing) return
+
+    const inputEvent = e as InputEvent
+    const data = inputEvent.data
+
+    if (data) {
+      // Send each character as a key event
+      for (const char of data) {
+        send({
+          type: "key",
+          key: char,
+          modifiers: { shift: false, ctrl: false, meta: false, super: false },
+        })
+      }
+    }
+
+    // Clear the textarea for next input
+    hiddenTextarea.value = ""
+  }
+
+  hiddenTextarea.addEventListener("input", handleInput)
+
+  // Handle special keys via keydown (arrows, function keys, Ctrl combos, etc.)
+  // These don't produce text input events
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Don't capture if user is typing in an input
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+    // Only handle events from our hidden textarea
+    if (e.target !== hiddenTextarea) {
       return
     }
 
-    // Ignore modifier-only key presses - they only affect other keys
+    // Ignore modifier-only key presses
     const modifierOnlyKeys = ["Alt", "Control", "Shift", "Meta", "CapsLock", "NumLock", "ScrollLock"]
     if (modifierOnlyKeys.includes(e.key)) {
       return
     }
 
-    // Don't prevent default for F-keys and meta shortcuts - let browser also handle them
+    // Don't interfere with IME composition
+    if (isComposing) {
+      return
+    }
+
+    // Keys that produce text input are handled by the 'input' event
+    // Only handle special keys here
+    const isSpecialKey =
+      e.key.length > 1 || // Named keys like "Enter", "Backspace", "ArrowUp"
+      e.ctrlKey || // Ctrl+key combos
+      e.metaKey // Cmd/Win+key combos
+
+    if (!isSpecialKey) {
+      // Let the 'input' event handle regular character input
+      return
+    }
+
+    // Prevent default for special keys we handle
     const isFKey = e.key.startsWith("F") && e.key.length <= 3 && !isNaN(Number(e.key.slice(1)))
     if (!isFKey && !e.metaKey) {
       e.preventDefault()
     }
 
-    // Detect if Alt/AltGr/Option was used to produce a character (e.g., @ on Italian keyboard)
-    // vs. being used as a command modifier (e.g., Alt+Tab).
-    // If e.key is a single printable character and altKey is true, the alt was used
-    // to produce the character, not as a modifier.
-    const isSinglePrintableChar = e.key.length === 1 && e.key.charCodeAt(0) >= 32
-    const altUsedForCharacter = e.altKey && isSinglePrintableChar
-
     // Map browser modifiers to terminal modifiers:
-    // Browser altKey (Alt/Option) → Terminal meta (bit 2) - but not if used for character input
-    // Browser metaKey (Cmd/Win) → Terminal super (bit 8)
+    // Browser altKey (Alt/Option) → Terminal meta
+    // Browser metaKey (Cmd/Win) → Terminal super
     send({
       type: "key",
       key: e.key,
       modifiers: {
         shift: e.shiftKey,
         ctrl: e.ctrlKey,
-        meta: e.altKey && !altUsedForCharacter, // Alt/Option → meta (unless used for character)
-        super: e.metaKey, // Cmd/Win → super
+        meta: e.altKey,
+        super: e.metaKey,
       },
     })
   }
@@ -313,33 +392,47 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
 
   // Attach event listeners
-  container.addEventListener("keydown", handleKeyDown)
+  hiddenTextarea.addEventListener("keydown", handleKeyDown)
   container.addEventListener("mousedown", handleMouseDown)
   container.addEventListener("mousemove", handleMouseMove)
   container.addEventListener("mouseup", handleMouseUp)
   container.addEventListener("wheel", handleWheel, { passive: false })
 
-  // Make container focusable
-  if (!container.hasAttribute("tabindex")) {
-    container.setAttribute("tabindex", "0")
+  // Focus management
+  const setFocused = (focused: boolean) => {
+    if (focused) {
+      hiddenTextarea.focus()
+    } else {
+      hiddenTextarea.blur()
+    }
   }
-  container.focus()
+
+  // Apply initial focus
+  if (initialFocused) {
+    hiddenTextarea.focus()
+  }
 
   return {
     send,
     disconnect: () => {
       ws.close()
-      container.removeEventListener("keydown", handleKeyDown)
+      hiddenTextarea.removeEventListener("keydown", handleKeyDown)
+      hiddenTextarea.removeEventListener("input", handleInput)
       container.removeEventListener("mousedown", handleMouseDown)
       container.removeEventListener("mousemove", handleMouseMove)
       container.removeEventListener("mouseup", handleMouseUp)
       container.removeEventListener("wheel", handleWheel)
+      container.removeChild(hiddenTextarea)
       renderer.destroy()
     },
     resize: () => {
       const { cols, rows } = renderer.resize()
       send({ type: "resize", cols, rows })
       return { cols, rows }
+    },
+    setFocused,
+    get focused() {
+      return document.activeElement === hiddenTextarea
     },
   }
 }
