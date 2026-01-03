@@ -74,6 +74,12 @@ export class CanvasRenderer {
   private rows: number = 24
   public readonly metrics: FontMetrics
 
+  // Cursor blink state
+  private cursorBlinkInterval: ReturnType<typeof setInterval> | null = null
+  private cursorBlinkVisible: boolean = true
+  private lastCursorX: number = 0
+  private lastCursorY: number = 0
+
   constructor(options: CanvasRendererOptions) {
     this.container = options.container
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
@@ -176,7 +182,6 @@ export class CanvasRenderer {
       pointer-events: none;
       display: none;
       z-index: 3;
-      animation: opentui-blink 1s step-end infinite;
     `
 
     // Assemble DOM
@@ -271,11 +276,29 @@ export class CanvasRenderer {
       .opentui-text-layer *::selection {
         background-color: rgba(100, 150, 255, 0.3);
       }
-      @keyframes opentui-blink {
-        50% { opacity: 0; }
-      }
     `
     this.wrapper.appendChild(style)
+  }
+
+  private startCursorBlink(): void {
+    this.stopCursorBlink()
+    this.cursorBlinkInterval = setInterval(() => {
+      this.cursorBlinkVisible = !this.cursorBlinkVisible
+      this.cursorEl.style.opacity = this.cursorBlinkVisible ? "1" : "0"
+    }, 530) // ~1s full cycle (530ms on, 530ms off)
+  }
+
+  private stopCursorBlink(): void {
+    if (this.cursorBlinkInterval) {
+      clearInterval(this.cursorBlinkInterval)
+      this.cursorBlinkInterval = null
+    }
+  }
+
+  private resetCursorBlink(): void {
+    this.cursorBlinkVisible = true
+    this.cursorEl.style.opacity = "1"
+    this.startCursorBlink()
   }
 
   private clear(): void {
@@ -455,8 +478,19 @@ export class CanvasRenderer {
 
   updateCursor(x: number, y: number, visible: boolean): void {
     if (!visible) {
+      this.stopCursorBlink()
       this.cursorEl.style.display = "none"
       return
+    }
+
+    // Reset blink to visible state if position changed
+    if (x !== this.lastCursorX || y !== this.lastCursorY) {
+      this.lastCursorX = x
+      this.lastCursorY = y
+      this.resetCursorBlink()
+    } else if (!this.cursorBlinkInterval) {
+      // Start blinking if not already
+      this.startCursorBlink()
     }
 
     // Convert from 1-based terminal coordinates to 0-based
@@ -527,6 +561,7 @@ export class CanvasRenderer {
   }
 
   destroy(): void {
+    this.stopCursorBlink()
     this.container.removeChild(this.wrapper)
   }
 }

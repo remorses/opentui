@@ -83,6 +83,12 @@ export class TerminalRenderer {
   private fontFamily: string
   public readonly metrics: { charWidth: number; cellHeight: number }
 
+  // Cursor blink state
+  private cursorBlinkInterval: ReturnType<typeof setInterval> | null = null
+  private cursorBlinkVisible: boolean = true
+  private lastCursorX: number = 0
+  private lastCursorY: number = 0
+
   constructor(options: TerminalRendererOptions) {
     this.container = options.container
     this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
@@ -116,7 +122,6 @@ export class TerminalRenderer {
       background-color: rgba(255, 255, 255, 0.7);
       pointer-events: none;
       display: none;
-      animation: opentui-blink 1s step-end infinite;
     `
 
     this.container.appendChild(this.terminalEl)
@@ -175,11 +180,29 @@ export class TerminalRenderer {
       .opentui-line span {
         white-space: pre;
       }
-      @keyframes opentui-blink {
-        50% { opacity: 0; }
-      }
     `
     this.terminalEl.appendChild(style)
+  }
+
+  private startCursorBlink(): void {
+    this.stopCursorBlink()
+    this.cursorBlinkInterval = setInterval(() => {
+      this.cursorBlinkVisible = !this.cursorBlinkVisible
+      this.cursorEl.style.opacity = this.cursorBlinkVisible ? "1" : "0"
+    }, 530) // ~1s full cycle (530ms on, 530ms off)
+  }
+
+  private stopCursorBlink(): void {
+    if (this.cursorBlinkInterval) {
+      clearInterval(this.cursorBlinkInterval)
+      this.cursorBlinkInterval = null
+    }
+  }
+
+  private resetCursorBlink(): void {
+    this.cursorBlinkVisible = true
+    this.cursorEl.style.opacity = "1"
+    this.startCursorBlink()
   }
 
   renderFull(data: VTermData) {
@@ -229,8 +252,19 @@ export class TerminalRenderer {
 
   updateCursor(x: number, y: number, visible: boolean) {
     if (!visible) {
+      this.stopCursorBlink()
       this.cursorEl.style.display = "none"
       return
+    }
+
+    // Reset blink to visible state if position changed
+    if (x !== this.lastCursorX || y !== this.lastCursorY) {
+      this.lastCursorX = x
+      this.lastCursorY = y
+      this.resetCursorBlink()
+    } else if (!this.cursorBlinkInterval) {
+      // Start blinking if not already
+      this.startCursorBlink()
     }
 
     // Convert from 1-based terminal coordinates to 0-based CSS positioning
@@ -299,6 +333,7 @@ export class TerminalRenderer {
   }
 
   destroy(): void {
+    this.stopCursorBlink()
     this.container.removeChild(this.terminalEl)
   }
 }

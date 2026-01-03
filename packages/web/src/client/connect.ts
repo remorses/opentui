@@ -214,8 +214,15 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       e.preventDefault()
     }
 
+    // Detect if Alt/AltGr/Option was used to produce a character (e.g., @ on Italian keyboard)
+    // vs. being used as a command modifier (e.g., Alt+Tab).
+    // If e.key is a single printable character and altKey is true, the alt was used
+    // to produce the character, not as a modifier.
+    const isSinglePrintableChar = e.key.length === 1 && e.key.charCodeAt(0) >= 32
+    const altUsedForCharacter = e.altKey && isSinglePrintableChar
+
     // Map browser modifiers to terminal modifiers:
-    // Browser altKey (Alt/Option) → Terminal meta (bit 2)
+    // Browser altKey (Alt/Option) → Terminal meta (bit 2) - but not if used for character input
     // Browser metaKey (Cmd/Win) → Terminal super (bit 8)
     send({
       type: "key",
@@ -223,7 +230,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       modifiers: {
         shift: e.shiftKey,
         ctrl: e.ctrlKey,
-        meta: e.altKey, // Alt/Option → meta
+        meta: e.altKey && !altUsedForCharacter, // Alt/Option → meta (unless used for character)
         super: e.metaKey, // Cmd/Win → super
       },
     })
