@@ -9,8 +9,9 @@
             .hash = "uucode-0.1.0-ZZjBPvoGQACkgWDKIrtI8CQcSXIufU3Kvty-pIfh02i2",
         },
         .ghostty = .{
-            .url = "git+https://github.com/ghostty-org/ghostty.git#1c2db85aa41c7d929cb23b408229e297dce2758a",
-            .hash = "ghostty-1.3.0-dev-5UdBC6IDPgQ28qiPT4e-lWQJav95I4XjR9ddmEsv-dyp",
+            // Using fork with Windows fix: https://github.com/ghostty-org/ghostty/issues/10147
+            .url = "git+https://github.com/remorses/ghostty.git#fd725490a14e4500b6676d9f4d67f6a566006bd0",
+            .hash = "ghostty-1.3.0-dev-5UdBC1YFPgTu_jyuC0G4FGOhjsKgATa1Eqi5MY02ycYh",
         },
     },
     .paths = .{
