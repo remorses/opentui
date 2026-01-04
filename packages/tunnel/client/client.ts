@@ -45,10 +45,12 @@ if (!namespace || !tunnelId) {
 
   multiplexer.connect()
 
-  const terminal = connectTerminal({
+  connectTerminal({
     connection: multiplexer,
     id: tunnelId,
     container,
+    cols: 80,
+    rows: 24,
     fontFamily: "Consolas, monospace",
     fontSize: 14,
     lineHeight: 1.4,
@@ -67,6 +69,4 @@ if (!namespace || !tunnelId) {
       setTimeout(() => window.location.reload(), 2000)
     },
   })
-
-  window.addEventListener("resize", () => terminal.resize())
 }
