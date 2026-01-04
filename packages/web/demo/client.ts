@@ -1,14 +1,16 @@
 import { MultiplexerConnection, connectTerminal, type TerminalConnection } from "../src/client"
 
-const TERMINAL_COUNT = 4
+const GRID_COLS = 3
+const GRID_ROWS = 3
+const TERMINAL_COUNT = GRID_COLS * GRID_ROWS
 
-// Body as 2x2 grid
+// Body as grid
 document.body.style.cssText = `
   margin: 0;
   background: #0D1117;
   display: grid;
-  grid-template-columns: repeat(2, auto);
-  grid-template-rows: repeat(2, auto);
+  grid-template-columns: repeat(${GRID_COLS}, auto);
+  grid-template-rows: repeat(${GRID_ROWS}, auto);
   gap: 2px;
   justify-content: center;
   align-content: center;
