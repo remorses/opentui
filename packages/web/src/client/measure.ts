@@ -43,8 +43,9 @@ export function measureCellSize(options: MeasureCellOptions = {}): CellSize {
   ctx.font = `${fontSize}px ${fontFamily}`
 
   return {
-    width: ctx.measureText("M").width + letterSpacing,
-    height: fontSize * lineHeight,
+    // Round to integers to prevent sub-pixel gaps between adjacent cells
+    width: Math.ceil(ctx.measureText("M").width + letterSpacing),
+    height: Math.ceil(fontSize * lineHeight),
   }
 }
 
