@@ -2,7 +2,7 @@ import { MultiplexerConnection, connectTerminal, findBestFontSize, measureCellSi
 
 // Grid configuration
 const GRID_COLS = 3
-const GRID_ROWS = 8
+const GRID_ROWS = 3
 const TERMINAL_COUNT = GRID_COLS * GRID_ROWS
 
 // Terminal configuration
