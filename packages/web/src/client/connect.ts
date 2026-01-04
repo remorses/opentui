@@ -334,8 +334,9 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
   hiddenTextarea.addEventListener("blur", handleBlur)
 
+  // Defer initial focus to ensure DOM is ready (fallback if autofocus doesn't work)
   if (initialFocused) {
-    hiddenTextarea.focus()
+    requestAnimationFrame(() => hiddenTextarea.focus())
   }
 
   return {
