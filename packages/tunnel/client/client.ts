@@ -1,4 +1,4 @@
-import { MultiplexerConnection, connectTerminal } from "@opentui/web/client"
+import { MultiplexerConnection, connectTerminal } from "@opentuah/web/client"
 
 // Extract namespace and tunnelId from URL path: /s/{namespace}/{tunnelId}
 const parts = window.location.pathname.split("/").reverse()
