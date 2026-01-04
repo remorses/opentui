@@ -5,7 +5,7 @@
  * all terminals in a namespace dynamically.
  */
 
-import { MultiplexerConnection, connectTerminal, findBestFontSize, measureCellSize, type TerminalConnection } from "../src/client"
+import { MultiplexerConnection, connectTerminal, findBestFontSize, measureCellSize, type TerminalConnection } from "../../src/client"
 
 // Grid configuration - fixed like original client.ts
 const GRID_COLS = 3

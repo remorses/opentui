@@ -1,7 +1,7 @@
-import { opentuiWebSocket } from "../src/index"
+import { opentuiWebSocket } from "../../src/index"
 import html from "./index.html"
 import { createRoot } from "@opentui/react"
-import { App, theme } from "./components"
+import { App, theme } from "../components"
 
 function OverviewTab() {
   return (

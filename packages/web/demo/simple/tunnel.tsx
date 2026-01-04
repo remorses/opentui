@@ -1,12 +1,12 @@
 /**
  * Tunnel demo - same as server demo but exposed via public tunnel URL
  *
- * Usage: bun run demo:tunnel
+ * Usage: bun demo/simple/tunnel.tsx
  */
 
-import { connectTunnelServer } from "../src/index"
+import { connectTunnelServer } from "../../src/index"
 import { createRoot } from "@opentui/react"
-import { App, theme } from "./components"
+import { App, theme } from "../components"
 
 function OverviewTab() {
   return (

@@ -1,4 +1,4 @@
-import { MultiplexerConnection, connectTerminal, findBestFontSize, measureCellSize, type TerminalConnection } from "../src/client"
+import { MultiplexerConnection, connectTerminal, findBestFontSize, measureCellSize, type TerminalConnection } from "../../src/client"
 
 // Grid configuration
 const GRID_COLS = 3

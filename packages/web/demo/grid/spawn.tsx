@@ -2,16 +2,16 @@
  * Spawn a terminal in a shared namespace via the tunnel.
  *
  * Usage:
- *   bun demo/spawn.ts                    # Spawn with random ID in "grid-demo" namespace
- *   bun demo/spawn.ts --id term-1        # Spawn with specific ID
- *   bun demo/spawn.ts --namespace myns   # Use custom namespace
+ *   bun demo/grid/spawn.tsx                    # Spawn with random ID in "grid-demo" namespace
+ *   bun demo/grid/spawn.tsx --id term-1        # Spawn with specific ID
+ *   bun demo/grid/spawn.tsx --namespace myns   # Use custom namespace
  *
- * Multiple spawn.ts processes with the same namespace will appear in the grid client.
+ * Multiple spawn.tsx processes with the same namespace will appear in the grid client.
  */
 
-import { connectTunnelServer } from "../src/server/tunnel"
+import { connectTunnelServer } from "../../src/server/tunnel"
 import { createRoot } from "@opentui/react"
-import { App, theme, Tab } from "./components"
+import { App, theme, Tab } from "../components"
 
 // Parse CLI args
 const args = process.argv.slice(2)

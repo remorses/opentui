@@ -1,10 +1,10 @@
 /**
- * Server for the grid demo - serves the grid.html and bundles grid-client.ts
+ * Server for the grid demo - serves index.html and bundles client.ts
  *
- * Usage: bun demo/grid-server.ts
+ * Usage: bun demo/grid/server.ts
  */
 
-import html from "./grid.html"
+import html from "./index.html"
 
 const server = Bun.serve({
   port: 3002,
@@ -13,16 +13,16 @@ const server = Bun.serve({
   // @ts-expect-error - Bun's static option is not in the type definitions yet
   static: {
     "/": html,
-    "/grid.html": html,
+    "/index.html": html,
   },
 
   async fetch(req) {
     const url = new URL(req.url)
 
-    if (url.pathname === "/grid-client.ts") {
+    if (url.pathname === "/client.ts") {
       // Bundle the client TypeScript
       const result = await Bun.build({
-        entrypoints: ["./demo/grid-client.ts"],
+        entrypoints: ["./demo/grid/client.ts"],
         target: "browser",
         minify: false,
       })
@@ -41,4 +41,4 @@ const server = Bun.serve({
 
 console.log(`Grid demo server running at http://localhost:${server.port}`)
 console.log(`Open http://localhost:${server.port}?namespace=grid-test in your browser`)
-console.log(`\nTo spawn terminals: bun demo/spawn.tsx --namespace grid-test --id term-1`)
+console.log(`\nTo spawn terminals: bun demo/grid/spawn.tsx --namespace grid-test --id term-1`)
