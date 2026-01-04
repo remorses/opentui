@@ -12,7 +12,7 @@
     "jsx": "react-jsx",
 
     "jsxImportSource": "@opentui/react"
-    // "types": ["bun-types"]
+
   },
   "include": ["src/**/*", "demo/**/*"],
   "exclude": ["node_modules", "dist", ]

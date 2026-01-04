@@ -28,6 +28,10 @@ const StyleFlags = {
 
 export interface CanvasRendererOptions {
   container: HTMLElement
+  /** Number of columns */
+  cols: number
+  /** Number of rows */
+  rows: number
   fontFamily?: string
   fontSize?: number
   /** Line height multiplier (default: 1.2) */
@@ -72,8 +76,8 @@ export class CanvasRenderer {
   private dpr: number
   private textBaseline: CanvasTextBaseline
 
-  private cols: number = 80
-  private rows: number = 24
+  private cols: number
+  private rows: number
   public readonly metrics: FontMetrics
 
   // Cursor blink state
@@ -97,6 +101,8 @@ export class CanvasRenderer {
     this.textColor = options.textColor ?? DEFAULT_FG
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
     this.focused = options.focused ?? true
+    this.cols = options.cols
+    this.rows = options.rows
 
     // Use 'alphabetic' baseline - most standard and predictable
     this.textBaseline = "alphabetic"
@@ -110,16 +116,15 @@ export class CanvasRenderer {
     })
     this.metrics = this.measureFont(cellSize)
 
-    // Calculate initial size from container
-    this.recalculateSize()
-
-    // Create wrapper div
+    // Create wrapper div with fixed dimensions
     this.wrapper = document.createElement("div")
     this.wrapper.className = "opentui-canvas-wrapper"
+    const width = this.cols * this.metrics.charWidth
+    const height = this.rows * this.metrics.cellHeight
     this.wrapper.style.cssText = `
       position: relative;
-      width: ${this.cols * this.metrics.charWidth}px;
-      height: ${this.rows * this.metrics.cellHeight}px;
+      width: ${width}px;
+      height: ${height}px;
       background-color: ${this.backgroundColor};
       overflow: hidden;
     `
@@ -231,27 +236,13 @@ export class CanvasRenderer {
     }
   }
 
-  private recalculateSize(): void {
-    const containerWidth = this.container.clientWidth
-    const containerHeight = this.container.clientHeight
-
-    this.cols = Math.floor(containerWidth / this.metrics.charWidth)
-    this.rows = Math.floor(containerHeight / this.metrics.cellHeight)
-
-    // Ensure at least 1x1
-    this.cols = Math.max(1, this.cols)
-    this.rows = Math.max(1, this.rows)
-  }
-
   private updateSize(): void {
     const width = this.cols * this.metrics.charWidth
     const height = this.rows * this.metrics.cellHeight
 
-    // Update wrapper
+    // Update wrapper and canvas dimensions
     this.wrapper.style.width = `${width}px`
     this.wrapper.style.height = `${height}px`
-
-    // Update canvas
     this.canvas.style.width = `${width}px`
     this.canvas.style.height = `${height}px`
     this.canvas.width = width * this.dpr
@@ -261,10 +252,8 @@ export class CanvasRenderer {
     this.clear()
   }
 
-  /** Recalculate size from container and update. Call this after container resizes. */
-  resize(): { cols: number; rows: number } {
-    this.recalculateSize()
-    this.updateSize()
+  /** Returns the current terminal size */
+  getSize(): { cols: number; rows: number } {
     return { cols: this.cols, rows: this.rows }
   }
 
@@ -506,10 +495,6 @@ export class CanvasRenderer {
     this.cursorEl.style.top = `${cssY}px`
     this.cursorEl.style.width = `${this.metrics.charWidth}px`
     this.cursorEl.style.height = `${this.metrics.cellHeight}px`
-  }
-
-  getSize(): { cols: number; rows: number } {
-    return { cols: this.cols, rows: this.rows }
   }
 
   setFocused(focused: boolean): void {

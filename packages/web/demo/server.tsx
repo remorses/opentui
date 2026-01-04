@@ -381,12 +381,7 @@ function App() {
   )
 }
 
-// Transpile client.ts to JS
-const clientBuild = await Bun.build({
-  entrypoints: [import.meta.dir + "/client.ts"],
-  minify: false,
-})
-const clientJs = await clientBuild.outputs[0].text()
+
 
 // Create WebSocket handler
 const ws = opentuiWebSocket({
@@ -414,9 +409,6 @@ const server = Bun.serve({
   // @ts-expect-error - Bun's static option is not in the type definitions yet
   static: {
     "/": html,
-    "/client.ts": new Response(clientJs, {
-      headers: { "Content-Type": "application/javascript" },
-    }),
   },
 
   fetch(req, server) {

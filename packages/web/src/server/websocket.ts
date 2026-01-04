@@ -14,6 +14,7 @@ interface WebSocketData {
   tunnelId: string
   namespace: string
   query: URLSearchParams
+  pendingMessages: string[]
 }
 
 /**
@@ -72,7 +73,7 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
         }
 
         const upgraded = server.upgrade(req, {
-          data: { sessionId: "", tunnelId, namespace, query },
+          data: { sessionId: "", tunnelId, namespace, query, pendingMessages: [] },
         })
 
         if (upgraded) {
@@ -103,6 +104,18 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
 
           const sessionId = await sessionManager.createSession(wrappedWs as any, query)
           ws.data.sessionId = sessionId
+
+          // Process any messages that arrived while session was being created
+          for (const pendingMessage of ws.data.pendingMessages) {
+            try {
+              const data = JSON.parse(pendingMessage) as ClientMessage
+              sessionManager.handleMessage(sessionId, data)
+            } catch (error) {
+              console.error("[opentui/web] Error processing pending message:", error)
+            }
+          }
+          ws.data.pendingMessages = []
+
           Bun.write(
             Bun.stderr,
             `[opentui/web] Session ${sessionId} connected (tunnel: ${tunnelId}, ${sessionManager.getSessionCount()} active)\n`,
@@ -116,7 +129,7 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
         try {
           // Unwrap multiplexed message: {id, data}
           const multiplexed = JSON.parse(String(message)) as MultiplexedIncoming
-          
+
           // Check if it's a data message (not an event)
           if (!("data" in multiplexed)) {
             return
@@ -127,15 +140,14 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
             return
           }
 
-          const data = JSON.parse(multiplexed.data) as ClientMessage
           const sessionId = ws.data.sessionId
           if (!sessionId) {
-            Bun.write(
-              Bun.stderr,
-              `[opentui/web] Message received before session created, ignoring\n`,
-            )
+            // Queue message until session is ready
+            ws.data.pendingMessages.push(multiplexed.data)
             return
           }
+
+          const data = JSON.parse(multiplexed.data) as ClientMessage
           sessionManager.handleMessage(sessionId, data)
         } catch (error) {
           console.error("[opentui/web] Invalid message:", error)

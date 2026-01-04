@@ -22,8 +22,8 @@ export interface ConnectOptions extends RendererOptions {
 export interface TerminalConnection {
   send: (message: ClientMessage) => void
   disconnect: () => void
-  /** Recalculate size from container and notify server. Call after container resizes. */
-  resize: () => { cols: number; rows: number }
+  /** Returns the terminal size */
+  getSize: () => { cols: number; rows: number }
   /** Set whether the terminal is focused for keyboard input */
   setFocused: (focused: boolean) => void
   /** Whether the terminal is currently focused */
@@ -340,11 +340,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       container.removeChild(hiddenTextarea)
       renderer.destroy()
     },
-    resize: () => {
-      const { cols, rows } = renderer.resize()
-      send({ type: "resize", cols, rows })
-      return { cols, rows }
-    },
+    getSize: () => renderer.getSize(),
     setFocused,
     get focused() {
       return document.activeElement === hiddenTextarea
