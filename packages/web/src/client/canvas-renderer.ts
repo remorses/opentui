@@ -85,7 +85,7 @@ export class CanvasRenderer {
   private cursorBlinkVisible: boolean = true
   private lastCursorX: number = 0
   private lastCursorY: number = 0
-  private focused: boolean = true
+  private _focused: boolean = true
 
   constructor(options: CanvasRendererOptions) {
     this.container = options.container
@@ -100,7 +100,7 @@ export class CanvasRenderer {
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
     this.textColor = options.textColor ?? DEFAULT_FG
     this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
-    this.focused = options.focused ?? true
+    this._focused = options.focused ?? true
     this.cols = options.cols
     this.rows = options.rows
 
@@ -277,7 +277,7 @@ export class CanvasRenderer {
     this.stopCursorBlink()
     this.cursorBlinkInterval = setInterval(() => {
       this.cursorBlinkVisible = !this.cursorBlinkVisible
-      this.cursorEl.style.opacity = this.focused && this.cursorBlinkVisible ? "1" : "0"
+      this.cursorEl.style.opacity = this._focused && this.cursorBlinkVisible ? "1" : "0"
     }, 530) // ~1s full cycle (530ms on, 530ms off)
   }
 
@@ -290,7 +290,7 @@ export class CanvasRenderer {
 
   private resetCursorBlink(): void {
     this.cursorBlinkVisible = true
-    this.cursorEl.style.opacity = this.focused ? "1" : "0"
+    this.cursorEl.style.opacity = this._focused ? "1" : "0"
     this.startCursorBlink()
   }
 
@@ -497,8 +497,12 @@ export class CanvasRenderer {
     this.cursorEl.style.height = `${this.metrics.cellHeight}px`
   }
 
+  get isFocused(): boolean {
+    return this._focused
+  }
+
   setFocused(focused: boolean): void {
-    this.focused = focused
+    this._focused = focused
     this.cursorEl.style.opacity = focused && this.cursorBlinkVisible ? "1" : "0"
   }
 

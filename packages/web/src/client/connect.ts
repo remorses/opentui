@@ -323,10 +323,16 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   }
 
-  // Defer initial focus to ensure DOM is ready
+  // Re-focus when textarea loses focus but terminal should stay focused
+  const handleBlur = () => {
+    if (renderer.isFocused) {
+      hiddenTextarea.focus()
+    }
+  }
+  hiddenTextarea.addEventListener("blur", handleBlur)
+
   if (initialFocused) {
     hiddenTextarea.focus()
-
   }
 
   return {
@@ -337,6 +343,7 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
       hiddenTextarea.removeEventListener("keydown", handleKeyDown)
       hiddenTextarea.removeEventListener("input", handleInput)
+      hiddenTextarea.removeEventListener("blur", handleBlur)
       container.removeEventListener("click", handleClick)
       container.removeEventListener("mousedown", handleMouseDown)
       container.removeEventListener("mousemove", handleMouseMove)
