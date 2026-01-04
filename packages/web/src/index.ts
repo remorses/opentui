@@ -2,7 +2,7 @@
 export { serve, type ServeOptions, type WebServer } from "./server/serve"
 export { opentuiWebSocket, type OpentuiWebSocketOptions } from "./server/websocket"
 export { type Session } from "./server/session"
-export { connectTunnel, type TunnelOptions, type TunnelInfo, type TunnelConnection } from "./server/tunnel"
+export { connectTunnelServer, type TunnelOptions, type TunnelInfo, type TunnelConnection } from "./server/tunnel"
 
 // Shared types
 export type {

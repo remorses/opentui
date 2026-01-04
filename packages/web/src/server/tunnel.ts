@@ -67,7 +67,7 @@ export interface TunnelConnection {
  * console.log(`Share: ${tunnel.info.htmlUrl}`)
  * ```
  */
-export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection> {
+export function connectTunnelServer(options: TunnelOptions): Promise<TunnelConnection> {
   const {
     url = DEFAULT_TUNNEL_URL,
     tunnelId = crypto.randomUUID(),

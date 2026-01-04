@@ -4,7 +4,7 @@
  * Usage: bun run demo:tunnel
  */
 
-import { connectTunnel } from "../src/index"
+import { connectTunnelServer } from "../src/index"
 import { createRoot } from "@opentui/react"
 import { App, theme } from "./components"
 
@@ -94,7 +94,7 @@ function OverviewTab() {
 // Connect via tunnel
 console.log("Connecting to tunnel...")
 
-await connectTunnel({
+await connectTunnelServer({
   maxCols: 120,
   maxRows: 40,
   frameRate: 60,
