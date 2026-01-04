@@ -146,7 +146,8 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
 
   // Create hidden textarea for capturing text input
   const hiddenTextarea = document.createElement("textarea")
-  hiddenTextarea.className = "opentui-input"
+  hiddenTextarea.className = `opentui-input opentui-input-${id}`
+  hiddenTextarea.dataset.terminalId = id
   hiddenTextarea.setAttribute("autocomplete", "off")
   hiddenTextarea.setAttribute("autocorrect", "off")
   hiddenTextarea.setAttribute("autocapitalize", "off")
@@ -339,8 +340,9 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
   hiddenTextarea.addEventListener("blur", handleBlur)
 
-  // Defer initial focus to ensure DOM is ready (fallback if autofocus doesn't work)
+  // Focus immediately (works during user interaction), with RAF as fallback
   if (initialFocused) {
+    hiddenTextarea.focus()
     requestAnimationFrame(() => hiddenTextarea.focus())
   }
 

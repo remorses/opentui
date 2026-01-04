@@ -72,8 +72,8 @@ updateStatus()
 
 // Calculate layout based on viewport and terminal count
 function calculateLayout(terminalCount: number) {
-  const gridCols = Math.min(terminalCount || 1, MAX_GRID_COLS)
-  const gridRows = Math.ceil((terminalCount || 1) / MAX_GRID_COLS)
+  const gridCols = Math.min(terminalCount || 1, GRID_COLS)
+  const gridRows = Math.ceil((terminalCount || 1) / GRID_COLS)
 
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
@@ -147,27 +147,63 @@ function updateGridLayout() {
   `
 }
 
-// Focus a terminal by ID
+// Focus a terminal by ID (atomic update like simple/client.ts)
 function focusTerminal(id: string) {
-  if (focusedId === id) return // Already focused
-  
-  const target = terminals.get(id)
-  if (!target) return
-  
-  // First, focus the new terminal (this naturally blurs the old one)
-  target.terminal.setFocused(true)
-  target.container.style.outline = "2px solid #58a6ff"
-  
-  // Then update the old focused terminal's state
-  if (focusedId) {
-    const old = terminals.get(focusedId)
-    if (old) {
-      old.terminal.setFocused(false)
-      old.container.style.outline = "none"
-    }
+  if (!terminals.has(id)) return
+
+  // Always update all terminals - ensures DOM focus is restored even if focusedId matches
+  for (const [termId, entry] of terminals) {
+    const isCurrent = termId === id
+    entry.terminal.setFocused(isCurrent)
+    entry.container.style.outline = isCurrent ? "2px solid #58a6ff" : "none"
   }
-  
+
   focusedId = id
+}
+
+// Resize all terminals to match current grid layout
+function resizeAllTerminals(multiplexer: MultiplexerConnection) {
+  const count = discoveredIds.length
+  if (count === 0) return
+
+  const layout = calculateLayout(count)
+
+  for (const [id, entry] of terminals) {
+    const isFocused = id === focusedId
+
+    // Disconnect old terminal
+    entry.terminal.disconnect()
+    entry.container.innerHTML = ""
+
+    // Recreate with new dimensions
+    const terminal = connectTerminal({
+      connection: multiplexer,
+      id,
+      container: entry.container,
+      focused: isFocused,
+      fontFamily: FONT_FAMILY,
+      fontSize: layout.fontSize,
+      lineHeight: LINE_HEIGHT,
+      devicePixelRatio: 1.5,
+      letterSpacing: LETTER_SPACING,
+      fontWeight: 500,
+      fontWeightBold: 700,
+      backgroundColor: "#0D1117",
+      cols: layout.cols,
+      rows: layout.rows,
+    })
+
+    terminals.set(id, { container: entry.container, terminal })
+  }
+
+  // Re-apply focus after all terminals are recreated to ensure proper focus state
+  if (focusedId && terminals.has(focusedId)) {
+    const entry = terminals.get(focusedId)!
+    entry.terminal.setFocused(true)
+    entry.container.style.outline = "2px solid #58a6ff"
+  }
+
+  console.log(`[grid] Resized all terminals to ${layout.cols}x${layout.rows}`)
 }
 
 // Create a terminal for a discovered ID
@@ -216,9 +252,10 @@ function createTerminalForId(id: string, multiplexer: MultiplexerConnection) {
 }
 
 // Remove a terminal
-function removeTerminal(id: string) {
+function removeTerminal(id: string, multiplexer: MultiplexerConnection) {
   const entry = terminals.get(id)
   if (entry) {
+    entry.terminal.disconnect()
     entry.container.remove()
     terminals.delete(id)
   }
@@ -228,7 +265,17 @@ function removeTerminal(id: string) {
     discoveredIds.splice(idx, 1)
   }
 
+  // If focused terminal was removed, focus another one
+  if (focusedId === id) {
+    focusedId = null
+    const remainingIds = Array.from(terminals.keys())
+    if (remainingIds.length > 0) {
+      focusTerminal(remainingIds[0])
+    }
+  }
+
   updateGridLayout()
+  resizeAllTerminals(multiplexer)
   updateStatus()
   console.log(`[grid] Removed terminal ${id} (${terminals.size} remaining)`)
 }
@@ -242,7 +289,7 @@ const multiplexer = new MultiplexerConnection({
 
 // Listen for terminal discovery
 multiplexer.subscribe((event) => {
-  console.log(`[grid] Event:`, event.type, "id" in event ? event.id : "")
+  // console.log(`[grid] Event:`, event.type, "id" in event ? event.id : "")
 
   switch (event.type) {
     case "upstream_discovered":
@@ -250,6 +297,8 @@ multiplexer.subscribe((event) => {
         discoveredIds.push(event.id)
         discoveredIds.sort()
         updateGridLayout()
+        // Resize existing terminals first, then create the new one
+        resizeAllTerminals(multiplexer)
         createTerminalForId(event.id, multiplexer)
       }
       break
@@ -259,7 +308,7 @@ multiplexer.subscribe((event) => {
       break
 
     case "upstream_closed":
-      removeTerminal(event.id)
+      removeTerminal(event.id, multiplexer)
       break
 
     case "multiplexer_connected":
@@ -325,5 +374,6 @@ window.addEventListener("resize", () => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
   resizeTimeout = setTimeout(() => {
     updateGridLayout()
+    resizeAllTerminals(multiplexer)
   }, 100)
 })
