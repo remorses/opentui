@@ -300,14 +300,8 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   }
 
-  // Click to focus
-  const handleClick = () => {
-    hiddenTextarea.focus()
-  }
-
   // Attach event listeners
   hiddenTextarea.addEventListener("keydown", handleKeyDown)
-  container.addEventListener("click", handleClick)
   container.addEventListener("mousedown", handleMouseDown)
   container.addEventListener("mousemove", handleMouseMove)
   container.addEventListener("mouseup", handleMouseUp)
@@ -324,10 +318,19 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
 
   // Re-focus when textarea loses focus but terminal should stay focused
+  // Use requestAnimationFrame to defer the check, allowing focusTerminal()
+  // to update renderer state first in multi-terminal scenarios
   const handleBlur = () => {
-    if (renderer.isFocused) {
-      hiddenTextarea.focus()
-    }
+    requestAnimationFrame(() => {
+      const active = document.activeElement
+      // Only re-focus if:
+      // 1. This terminal should be focused (renderer.isFocused)
+      // 2. No other opentui textarea has taken focus (prevents focus fights between terminals)
+      const anotherOpentuiHasFocus = active?.classList.contains("opentui-input")
+      if (renderer.isFocused && !anotherOpentuiHasFocus) {
+        hiddenTextarea.focus()
+      }
+    })
   }
   hiddenTextarea.addEventListener("blur", handleBlur)
 
@@ -344,7 +347,6 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
       hiddenTextarea.removeEventListener("keydown", handleKeyDown)
       hiddenTextarea.removeEventListener("input", handleInput)
       hiddenTextarea.removeEventListener("blur", handleBlur)
-      container.removeEventListener("click", handleClick)
       container.removeEventListener("mousedown", handleMouseDown)
       container.removeEventListener("mousemove", handleMouseMove)
       container.removeEventListener("mouseup", handleMouseUp)
