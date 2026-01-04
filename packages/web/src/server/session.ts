@@ -46,13 +46,12 @@ export interface Session {
 
 export interface CreateSessionOptions {
   id?: string
-  cols?: number
-  rows?: number
   maxCols?: number
   maxRows?: number
   frameRate?: number
   send: (message: ServerMessage) => void
   close: () => void
+  /** Called when browser sends first resize message (confirms client is ready) */
   onConnection: (session: Session) => void | (() => void)
 }
 
@@ -61,12 +60,11 @@ export interface SessionHandle {
   destroy: () => void
 }
 
-/** Create a standalone session - reusable by both server and tunnel modes */
-export async function createSession(options: CreateSessionOptions): Promise<SessionHandle> {
+/** Create a standalone session - reusable by both server and tunnel modes.
+ * Session waits for first resize message before initializing renderer and calling onConnection. */
+export function createSession(options: CreateSessionOptions): SessionHandle {
   const {
     id = crypto.randomUUID(),
-    cols = 80,
-    rows = 24,
     maxCols = 200,
     maxRows = 60,
     frameRate = 50,
@@ -75,11 +73,10 @@ export async function createSession(options: CreateSessionOptions): Promise<Sess
     onConnection,
   } = options
 
-  const testRenderer = await createTestRenderer({ width: cols, height: rows })
-
-  // Session state
-  let currentCols = cols
-  let currentRows = rows
+  // Session state - renderer created lazily on first resize
+  let testRenderer: Awaited<ReturnType<typeof createTestRenderer>> | null = null
+  let currentCols = 0
+  let currentRows = 0
   let lastLines: VTermLine[] = []
   let lastCursor: { x: number; y: number; visible: boolean } | null = null
   let cleanup: (() => void) | undefined
@@ -87,6 +84,7 @@ export async function createSession(options: CreateSessionOptions): Promise<Sess
   let pendingRender = false
   let renderInterval: Timer | null = null
   let destroyed = false
+  let initialized = false
 
   // Helper to send messages
   function sendMessage(message: ServerMessage): void {
@@ -99,7 +97,7 @@ export async function createSession(options: CreateSessionOptions): Promise<Sess
 
   // Render loop tick
   async function tick(): Promise<void> {
-    if (destroyed) return
+    if (destroyed || !testRenderer) return
 
     if (rendering) {
       pendingRender = true
@@ -152,46 +150,89 @@ export async function createSession(options: CreateSessionOptions): Promise<Sess
     }
   }
 
-  // Create public session interface
-  const publicSession: Session = {
-    id,
-    renderer: testRenderer.renderer,
-    cols: currentCols,
-    rows: currentRows,
-    send: (data: unknown) => sendMessage(data as ServerMessage),
-    close,
-  }
+  // Initialize session on first resize - creates renderer, calls onConnection, starts render loop
+  async function initialize(cols: number, rows: number): Promise<void> {
+    if (initialized || destroyed) return
+    initialized = true
 
-  // Listen for selection changes
-  testRenderer.renderer.on("selection", (selection) => {
-    if (selection) {
-      sendMessage({
-        type: "selection",
-        anchor: selection.anchor,
-        focus: selection.focus,
-      })
-    } else {
-      sendMessage({ type: "selection-clear" })
+    currentCols = cols
+    currentRows = rows
+
+    // Create renderer with actual size from client
+    testRenderer = await createTestRenderer({ width: cols, height: rows })
+
+    // Create public session interface
+    const publicSession: Session = {
+      id,
+      renderer: testRenderer.renderer,
+      cols: currentCols,
+      rows: currentRows,
+      send: (data: unknown) => sendMessage(data as ServerMessage),
+      close,
     }
-  })
 
-  // Call user's onConnection handler
-  const userCleanup = onConnection(publicSession)
-  if (userCleanup) {
-    cleanup = userCleanup
+    // Listen for selection changes
+    testRenderer.renderer.on("selection", (selection) => {
+      if (selection) {
+        sendMessage({
+          type: "selection",
+          anchor: selection.anchor,
+          focus: selection.focus,
+        })
+      } else {
+        sendMessage({ type: "selection-clear" })
+      }
+    })
+
+    // Call user's onConnection handler
+    const userCleanup = onConnection(publicSession)
+    if (userCleanup) {
+      cleanup = userCleanup
+    }
+
+    // Start render loop
+    const frameTime = 1000 / frameRate
+    renderInterval = setInterval(async () => {
+      await tick()
+    }, frameTime)
+
+    // Trigger first render
+    tick()
   }
-
-  // Start render loop
-  const frameTime = 1000 / frameRate
-  renderInterval = setInterval(async () => {
-    await tick()
-  }, frameTime)
 
   // Handle incoming messages
   function handleMessage(message: ClientMessage): void {
     if (destroyed) return
 
-    const { mockInput, mockMouse, resize } = testRenderer
+    // Handle resize first - it initializes the session
+    if (message.type === "resize") {
+      const newCols = Math.min(message.cols, maxCols)
+      const newRows = Math.min(message.rows, maxRows)
+
+      if (!initialized) {
+        // First resize - initialize session
+        initialize(newCols, newRows)
+      } else if (testRenderer) {
+        // Subsequent resize
+        testRenderer.resize(newCols, newRows)
+        currentCols = newCols
+        currentRows = newRows
+        lastLines = [] // Force full redraw on resize
+        tick()
+      }
+      return
+    }
+
+    // Handle ping without requiring initialization
+    if (message.type === "ping") {
+      sendMessage({ type: "pong" })
+      return
+    }
+
+    // All other messages require initialized session
+    if (!testRenderer) return
+
+    const { mockInput, mockMouse } = testRenderer
 
     switch (message.type) {
       case "key": {
@@ -229,21 +270,6 @@ export async function createSession(options: CreateSessionOptions): Promise<Sess
         tick()
         break
       }
-
-      case "resize": {
-        const newCols = Math.min(message.cols, maxCols)
-        const newRows = Math.min(message.rows, maxRows)
-        resize(newCols, newRows)
-        currentCols = newCols
-        currentRows = newRows
-        lastLines = [] // Force full redraw on resize
-        tick()
-        break
-      }
-
-      case "ping":
-        sendMessage({ type: "pong" })
-        break
     }
   }
 
@@ -265,7 +291,9 @@ export async function createSession(options: CreateSessionOptions): Promise<Sess
       }
     }
 
-    testRenderer.renderer.destroy()
+    if (testRenderer) {
+      testRenderer.renderer.destroy()
+    }
   }
 
   return { handleMessage, destroy }
@@ -297,15 +325,11 @@ export class SessionManager {
     this.onConnection = options.onConnection
   }
 
-  async createSession(ws: ServerWebSocket<{ sessionId: string }>, query: URLSearchParams): Promise<string> {
+  createSession(ws: ServerWebSocket<{ sessionId: string }>): string {
     const id = crypto.randomUUID()
-    const cols = Math.min(parseInt(query.get("cols") || "80"), this.maxCols)
-    const rows = Math.min(parseInt(query.get("rows") || "24"), this.maxRows)
 
-    const handle = await createSession({
+    const handle = createSession({
       id,
-      cols,
-      rows,
       maxCols: this.maxCols,
       maxRows: this.maxRows,
       frameRate: this.frameRate,

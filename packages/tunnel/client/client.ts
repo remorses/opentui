@@ -17,8 +17,12 @@ if (!namespace || !tunnelId) {
   document.body.style.cssText = "margin: 0; background: #1e1e1e; overflow: hidden;"
   container.style.cssText = "width: 100vw; height: 100vh;"
 
+  const cols = 80
+  const rows = 24
+  const initialMessage = encodeURIComponent(JSON.stringify({ type: "resize", cols, rows }))
+
   const multiplexer = new MultiplexerConnection({
-    url: `wss://${window.location.host}/_tunnel`,
+    url: `wss://${window.location.host}/_tunnel?initialMessage=${initialMessage}`,
     namespace,
     ids: [tunnelId],
     onConnect: () => console.log("[opentui] Connected:", namespace, tunnelId),
@@ -50,8 +54,8 @@ if (!namespace || !tunnelId) {
     connection: multiplexer,
     id: tunnelId,
     container,
-    cols: 80,
-    rows: 24,
+    cols,
+    rows,
     fontFamily: "Consolas, monospace",
     fontSize: 14,
     lineHeight: 1.4,

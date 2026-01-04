@@ -99,7 +99,7 @@ export class CanvasRenderer {
     this.letterSpacing = options.letterSpacing ?? 0
     this.backgroundColor = options.backgroundColor ?? DEFAULT_BG
     this.textColor = options.textColor ?? DEFAULT_FG
-    this.dpr = options.devicePixelRatio ?? window.devicePixelRatio ?? 1
+    this.dpr = options.devicePixelRatio ?? (window.devicePixelRatio ?? 1) * 1.5
     this._focused = options.focused ?? true
     this.cols = options.cols
     this.rows = options.rows

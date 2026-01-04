@@ -102,7 +102,7 @@ export function opentuiWebSocket(options: OpentuiWebSocketOptions) {
             readyState: ws.readyState,
           }
 
-          const sessionId = await sessionManager.createSession(wrappedWs as any, query)
+          const sessionId = sessionManager.createSession(wrappedWs as any)
           ws.data.sessionId = sessionId
 
           // Process any messages that arrived while session was being created

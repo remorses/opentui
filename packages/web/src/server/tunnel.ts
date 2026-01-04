@@ -13,7 +13,7 @@ export interface TunnelOptions {
   /** Tunnel ID. Defaults to a random UUID */
   tunnelId?: string
 
-  /** Called when a browser connects */
+  /** Called when a browser connects and sends its terminal size */
   onConnection: (session: Session) => void | (() => void)
 
   /** Called when connected to tunnel with shareable URL */
@@ -33,12 +33,6 @@ export interface TunnelOptions {
 
   /** Frame rate in fps (default: 50) */
   frameRate?: number
-
-  /** Initial columns (default: 80) */
-  cols?: number
-
-  /** Initial rows (default: 24) */
-  rows?: number
 }
 
 export interface TunnelInfo {
@@ -84,8 +78,6 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
     maxCols = 200,
     maxRows = 60,
     frameRate = 50,
-    cols = 80,
-    rows = 24,
   } = options
 
   const namespace = options.namespace ?? tunnelId
@@ -116,11 +108,9 @@ export function connectTunnel(options: TunnelOptions): Promise<TunnelConnection>
       isConnected = true
       const elapsed = Date.now() - start
 
-      // Create session
-      session = await createSession({
+      // Create session - waits for browser to send resize before initializing
+      session = createSession({
         id: tunnelId,
-        cols,
-        rows,
         maxCols,
         maxRows,
         frameRate,
