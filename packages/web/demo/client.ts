@@ -1,8 +1,14 @@
 import { MultiplexerConnection, connectTerminal, type TerminalConnection } from "../src/client"
 
 const GRID_COLS = 3
-const GRID_ROWS = 3
+const GRID_ROWS = 6
 const TERMINAL_COUNT = GRID_COLS * GRID_ROWS
+
+// Allow page scrolling
+document.documentElement.style.cssText = `
+  overflow-y: auto;
+  overflow-x: hidden;
+`
 
 // Body as grid
 document.body.style.cssText = `
@@ -13,8 +19,10 @@ document.body.style.cssText = `
   grid-template-rows: repeat(${GRID_ROWS}, auto);
   gap: 2px;
   justify-content: center;
-  align-content: center;
-  height: 100vh;
+  align-content: start;
+  min-height: 100vh;
+  padding: 2px 0;
+  overflow: visible;
 `
 
 // Generate a unique tunnel ID for this session

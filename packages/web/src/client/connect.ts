@@ -267,6 +267,11 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   let scrollPending: { x: number; y: number } | null = null
 
   const handleWheel = (e: WheelEvent) => {
+    // Only capture scroll on focused terminal, let unfocused terminals scroll the page
+    if (!renderer.isFocused) {
+      return
+    }
+
     e.preventDefault()
 
     let deltaLines: number
