@@ -179,11 +179,13 @@ export class MultiplexerConnection {
     for (const listener of this.listeners) {
       listener(event)
     }
-    // Notify ID-specific listeners
-    const idListeners = this.idListeners.get(event.id)
-    if (idListeners) {
-      for (const listener of idListeners) {
-        listener(event)
+    // Notify ID-specific listeners (only for events that have an id)
+    if ("id" in event) {
+      const idListeners = this.idListeners.get(event.id)
+      if (idListeners) {
+        for (const listener of idListeners) {
+          listener(event)
+        }
       }
     }
   }
