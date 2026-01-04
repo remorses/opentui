@@ -161,6 +161,9 @@ export function createSession(options: CreateSessionOptions): SessionHandle {
     // Create renderer with actual size from client
     testRenderer = await createTestRenderer({ width: cols, height: rows })
 
+    // Hide cursor by default - components will show it when focused
+    testRenderer.renderer.setCursorPosition(0, 0, false)
+
     // Create public session interface
     const publicSession: Session = {
       id,
