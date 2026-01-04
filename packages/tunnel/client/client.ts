@@ -1,7 +1,8 @@
 import { MultiplexerConnection, connectTerminal } from "@opentui/web/client"
 
 // Extract namespace and tunnelId from URL path: /s/{namespace}/{tunnelId}
-const [, , namespace, tunnelId] = window.location.pathname.split("/")
+const parts = window.location.pathname.split("/").reverse()
+const [tunnelId, namespace] = parts
 
 const container = document.getElementById("terminal")!
 
@@ -28,7 +29,7 @@ if (!namespace || !tunnelId) {
           <h1>Reconnecting...</h1>
         </div>
       `
-      setTimeout(() => window.location.reload(), 2000)
+      // setTimeout(() => window.location.reload(), 2000)
     },
     onError: (error) => {
       console.error("[opentui] Error:", error)
@@ -58,6 +59,7 @@ if (!namespace || !tunnelId) {
     fontWeight: 500,
     fontWeightBold: 700,
     backgroundColor: "#1e1e1e",
+
     onUpstreamClosed: () => {
       console.log("[opentui] Upstream closed")
       container.innerHTML = `
@@ -66,7 +68,7 @@ if (!namespace || !tunnelId) {
           <p>The upstream application disconnected.</p>
         </div>
       `
-      setTimeout(() => window.location.reload(), 2000)
+      // setTimeout(() => window.location.reload(), 2000)
     },
   })
 }
