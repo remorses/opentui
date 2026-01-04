@@ -152,6 +152,9 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   hiddenTextarea.setAttribute("autocapitalize", "off")
   hiddenTextarea.setAttribute("spellcheck", "false")
   hiddenTextarea.setAttribute("tabindex", "0")
+  if (initialFocused) {
+    hiddenTextarea.setAttribute("autofocus", "")
+  }
   hiddenTextarea.style.cssText = `
     position: absolute;
     left: -9999px;
@@ -320,8 +323,10 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
     }
   }
 
+  // Defer initial focus to ensure DOM is ready
   if (initialFocused) {
     hiddenTextarea.focus()
+
   }
 
   return {
