@@ -4,6 +4,7 @@ set -e
 
 LINK_REACT=false
 LINK_SOLID=false
+USE_DIST=false
 TARGET_ROOT=""
 
 while [[ $# -gt 0 ]]; do
@@ -16,6 +17,10 @@ while [[ $# -gt 0 ]]; do
             LINK_SOLID=true
             shift
             ;;
+        --dist)
+            USE_DIST=true
+            shift
+            ;;
         *)
             TARGET_ROOT="$1"
             shift
@@ -24,10 +29,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$TARGET_ROOT" ]; then
-    echo "Usage: $0 <target-project-root> [--react] [--solid]"
+    echo "Usage: $0 <target-project-root> [--react] [--solid] [--dist]"
     echo "Example: $0 /path/to/your/project"
     echo "Example: $0 /path/to/your/project --solid"
     echo "Example: $0 /path/to/your/project --react"
+    echo "Example: $0 /path/to/your/project --dist"
     echo ""
     echo "This script links OpenTUI dev packages into Bun's cache directory."
     echo "All workspace packages will automatically resolve through the cache."
@@ -35,6 +41,7 @@ if [ -z "$TARGET_ROOT" ]; then
     echo "Options:"
     echo "  --react    Also link @opentui/react and React dependencies"
     echo "  --solid    Also link @opentui/solid and solid-js"
+    echo "  --dist     Copy built dist folder instead of linking source (requires build first)"
     exit 1
 fi
 
@@ -59,7 +66,11 @@ if [ ! -d "$NODE_MODULES_DIR/.bun" ]; then
     exit 1
 fi
 
-echo "Linking OpenTUI dev packages from: $OPENTUI_ROOT"
+if [ "$USE_DIST" = true ]; then
+    echo "Copying OpenTUI dist packages from: $OPENTUI_ROOT"
+else
+    echo "Linking OpenTUI dev packages from: $OPENTUI_ROOT"
+fi
 echo "To Bun cache in: $NODE_MODULES_DIR/.bun"
 echo
 
@@ -94,6 +105,60 @@ link_in_bun_cache() {
             echo "  ✓ Linked $package_name in $(basename "$cache_dir")"
         fi
     done
+}
+
+# Helper function to copy dist to Bun cache
+copy_dist_to_bun_cache() {
+    local package_pattern="$1"
+    local package_name="$2"
+    local source_path="$3"
+    
+    local cache_dirs=$(find "$NODE_MODULES_DIR/.bun" -maxdepth 1 -type d -name "$package_pattern" 2>/dev/null)
+    
+    if [ -z "$cache_dirs" ]; then
+        echo "⚠ Warning: No Bun cache found for $package_name"
+        return 0
+    fi
+    
+    echo "$cache_dirs" | while read -r cache_dir; do
+        if [ -n "$cache_dir" ] && [ -d "$cache_dir" ]; then
+            local target_dir="$cache_dir/node_modules/$package_name"
+            local target_parent=$(dirname "$target_dir")
+            
+            # Remove existing directory/symlink
+            if [ -e "$target_dir" ] || [ -L "$target_dir" ]; then
+                rm -rf "$target_dir"
+            fi
+            
+            # Create parent directory if needed
+            mkdir -p "$target_parent"
+            
+            # Copy the dist folder contents
+            cp -r "$source_path" "$target_dir"
+            echo "  ✓ Copied $package_name to $(basename "$cache_dir")"
+        fi
+    done
+}
+
+# Helper function to copy dist to node_modules
+copy_dist_to_node_modules() {
+    local package_name="$1"
+    local source_path="$2"
+    
+    local target_dir="$NODE_MODULES_DIR/$package_name"
+    local target_parent=$(dirname "$target_dir")
+    
+    # Remove existing directory/symlink
+    if [ -e "$target_dir" ] || [ -L "$target_dir" ]; then
+        rm -rf "$target_dir"
+    fi
+    
+    # Create parent directory if needed (for scoped packages like @opentui/core)
+    mkdir -p "$target_parent"
+    
+    # Copy the dist folder contents
+    cp -r "$source_path" "$target_dir"
+    echo "  ✓ Copied $package_name to node_modules"
 }
 
 # Helper function to link a package in node_modules (to avoid duplicates)
@@ -132,9 +197,21 @@ remove_nested_dep() {
 }
 
 # Always link @opentui/core
-echo "Linking @opentui/core..."
-link_in_bun_cache "@opentui+core@*" "@opentui/core" "$OPENTUI_ROOT/packages/core"
-link_in_node_modules "@opentui/core" "$OPENTUI_ROOT/packages/core"
+if [ "$USE_DIST" = true ]; then
+    CORE_DIST="$OPENTUI_ROOT/packages/core/dist"
+    if [ ! -d "$CORE_DIST" ]; then
+        echo "Error: dist folder not found: $CORE_DIST"
+        echo "Please run 'bun run build' in the opentui project first."
+        exit 1
+    fi
+    echo "Copying @opentui/core dist..."
+    copy_dist_to_bun_cache "@opentui+core@*" "@opentui/core" "$CORE_DIST"
+    copy_dist_to_node_modules "@opentui/core" "$CORE_DIST"
+else
+    echo "Linking @opentui/core..."
+    link_in_bun_cache "@opentui+core@*" "@opentui/core" "$OPENTUI_ROOT/packages/core"
+    link_in_node_modules "@opentui/core" "$OPENTUI_ROOT/packages/core"
+fi
 
 # Link yoga-layout (required by core)
 echo "Linking yoga-layout..."
@@ -162,13 +239,25 @@ fi
 
 # Link @opentui/solid if requested
 if [ "$LINK_SOLID" = true ]; then
-    # Remove nested dependencies from @opentui/solid to prevent duplicates
-    echo "Removing nested dependencies from @opentui/solid..."
-    remove_nested_dep "solid" "solid-js"
-    
-    echo "Linking @opentui/solid..."
-    link_in_bun_cache "@opentui+solid@*" "@opentui/solid" "$OPENTUI_ROOT/packages/solid"
-    link_in_node_modules "@opentui/solid" "$OPENTUI_ROOT/packages/solid"
+    if [ "$USE_DIST" = true ]; then
+        SOLID_DIST="$OPENTUI_ROOT/packages/solid/dist"
+        if [ ! -d "$SOLID_DIST" ]; then
+            echo "Error: dist folder not found: $SOLID_DIST"
+            echo "Please run 'bun run build' in the opentui project first."
+            exit 1
+        fi
+        echo "Copying @opentui/solid dist..."
+        copy_dist_to_bun_cache "@opentui+solid@*" "@opentui/solid" "$SOLID_DIST"
+        copy_dist_to_node_modules "@opentui/solid" "$SOLID_DIST"
+    else
+        # Remove nested dependencies from @opentui/solid to prevent duplicates
+        echo "Removing nested dependencies from @opentui/solid..."
+        remove_nested_dep "solid" "solid-js"
+        
+        echo "Linking @opentui/solid..."
+        link_in_bun_cache "@opentui+solid@*" "@opentui/solid" "$OPENTUI_ROOT/packages/solid"
+        link_in_node_modules "@opentui/solid" "$OPENTUI_ROOT/packages/solid"
+    fi
     
     # Link solid-js from target project's node_modules (not from opentui)
     # This ensures @opentui/solid uses the same solid-js as the target project
@@ -178,15 +267,27 @@ fi
 
 # Link @opentui/react if requested
 if [ "$LINK_REACT" = true ]; then
-    # Remove nested dependencies from @opentui/react to prevent duplicates
-    echo "Removing nested dependencies from @opentui/react..."
-    remove_nested_dep "react" "react"
-    remove_nested_dep "react" "react-dom"
-    remove_nested_dep "react" "react-reconciler"
-    
-    echo "Linking @opentui/react..."
-    link_in_bun_cache "@opentui+react@*" "@opentui/react" "$OPENTUI_ROOT/packages/react"
-    link_in_node_modules "@opentui/react" "$OPENTUI_ROOT/packages/react"
+    if [ "$USE_DIST" = true ]; then
+        REACT_DIST="$OPENTUI_ROOT/packages/react/dist"
+        if [ ! -d "$REACT_DIST" ]; then
+            echo "Error: dist folder not found: $REACT_DIST"
+            echo "Please run 'bun run build' in the opentui project first."
+            exit 1
+        fi
+        echo "Copying @opentui/react dist..."
+        copy_dist_to_bun_cache "@opentui+react@*" "@opentui/react" "$REACT_DIST"
+        copy_dist_to_node_modules "@opentui/react" "$REACT_DIST"
+    else
+        # Remove nested dependencies from @opentui/react to prevent duplicates
+        echo "Removing nested dependencies from @opentui/react..."
+        remove_nested_dep "react" "react"
+        remove_nested_dep "react" "react-dom"
+        remove_nested_dep "react" "react-reconciler"
+        
+        echo "Linking @opentui/react..."
+        link_in_bun_cache "@opentui+react@*" "@opentui/react" "$OPENTUI_ROOT/packages/react"
+        link_in_node_modules "@opentui/react" "$OPENTUI_ROOT/packages/react"
+    fi
     
     # Link react dependencies from target project's node_modules (not from opentui)
     # This ensures @opentui/react uses the same react as the target project
@@ -201,5 +302,11 @@ if [ "$LINK_REACT" = true ]; then
 fi
 
 echo
-echo "✓ OpenTUI development linking complete!"
-echo "  All workspace packages will now resolve to your dev version through Bun's cache."
+if [ "$USE_DIST" = true ]; then
+    echo "✓ OpenTUI dist copying complete!"
+    echo "  All workspace packages will now resolve to the copied dist version."
+    echo "  Note: Run this script again after rebuilding to update the copied files."
+else
+    echo "✓ OpenTUI development linking complete!"
+    echo "  All workspace packages will now resolve to your dev version through Bun's cache."
+fi
