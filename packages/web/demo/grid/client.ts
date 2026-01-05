@@ -147,16 +147,22 @@ function updateGridLayout() {
   `
 }
 
-// Focus a terminal by ID (atomic update like simple/client.ts)
+// Focus a terminal by ID - two-pass to ensure proper blur before focus
 function focusTerminal(id: string) {
   if (!terminals.has(id)) return
 
-  // Always update all terminals - ensures DOM focus is restored even if focusedId matches
+  // Pass 1: Unfocus all other terminals first
   for (const [termId, entry] of terminals) {
-    const isCurrent = termId === id
-    entry.terminal.setFocused(isCurrent)
-    entry.container.style.outline = isCurrent ? "2px solid #58a6ff" : "none"
+    if (termId !== id) {
+      entry.terminal.setFocused(false)
+      entry.container.style.outline = "none"
+    }
   }
+
+  // Pass 2: Focus the target terminal
+  const target = terminals.get(id)!
+  target.terminal.setFocused(true)
+  target.container.style.outline = "2px solid #58a6ff"
 
   focusedId = id
 }
