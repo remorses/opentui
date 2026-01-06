@@ -1,9 +1,13 @@
 {
   "name": "@opentui",
+  "devDependencies": {
+    "prettier": "3.6.2"
+  },
+  "prettier": {
+    "semi": false,
+    "printWidth": 120
+  },
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "build": "cd packages/core && bun run build && cd ../solid && bun run build && cd ../react && bun run build",
     "build:go": "cd packages/go && go build ./...",
@@ -18,11 +22,7 @@
     "prettier:write": "prettier --write .",
     "test": "bun run --filter '@opentui/core' --filter '@opentui/solid' --filter '@opentui/react' --if-present test"
   },
-  "devDependencies": {
-    "prettier": "3.6.2"
-  },
-  "prettier": {
-    "semi": false,
-    "printWidth": 120
-  }
+  "workspaces": [
+    "packages/*"
+  ]
 }

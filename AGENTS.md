@@ -1,3 +1,11 @@
+# packages/tunnel
+
+before touching packages/tunnel ALWAYS fetch curl https://gitchamber.com/repos/remorses/holocron/preview/files/cloudflare-tunnel/src/tunnel.ts?glob=**/*.ts to understand how the tunnel works
+
+before touching packages/web always read all files inside the package to understand what it does.
+
+when running demos always use bun --watch and tmux in background. so result automatically updates on file changes and you can read well formatted logs if you need with tmux
+
 # Agent Guidelines for opentui
 
 Default to using Bun instead of Node.js.

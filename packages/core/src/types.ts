@@ -110,3 +110,34 @@ export interface LineInfoProvider {
   get virtualLineCount(): number
   get scrollY(): number
 }
+
+export const VTermStyleFlags = {
+  BOLD: 1,
+  ITALIC: 2,
+  UNDERLINE: 4,
+  STRIKETHROUGH: 8,
+  INVERSE: 16,
+  FAINT: 32,
+} as const
+
+export interface VTermSpan {
+  text: string
+  fg: string | null
+  bg: string | null
+  flags: number
+  width: number
+}
+
+export interface VTermLine {
+  spans: VTermSpan[]
+}
+
+export interface VTermData {
+  cols: number
+  rows: number
+  cursor: [number, number]
+  cursorVisible: boolean
+  offset: number
+  totalLines: number
+  lines: VTermLine[]
+}
