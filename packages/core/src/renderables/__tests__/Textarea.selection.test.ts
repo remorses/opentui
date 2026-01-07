@@ -5,10 +5,14 @@ import { RGBA } from "../../lib/RGBA"
 import { OptimizedBuffer } from "../../buffer"
 import { TextRenderable } from "../Text"
 
-// Skip mouse drag tests on Windows due to Bun stdin escape sequence handling issues
+// TODO: Re-enable when Bun fixes Windows stdin escape sequence handling
+// Windows: Bun stdin bug corrupts mouse event sequences, causing wrong selection coordinates
 // See: https://github.com/oven-sh/bun/issues/22285
 const isWindows = process.platform === "win32"
-// Skip flaky viewport scroll selection tests - Windows has Bun stdin bug, darwin has timing flakiness
+
+// TODO: Re-enable viewport scroll tests when Bun stdin bug is fixed (Windows) and timing is stabilized (Darwin)
+// Windows: Bun stdin bug - https://github.com/oven-sh/bun/issues/22285
+// Darwin: timing flakiness in CI - mock mouse drag uses setTimeout which behaves inconsistently
 const skipViewportScrollTests = process.platform === "win32" || process.platform === "darwin"
 
 let currentRenderer: TestRenderer
