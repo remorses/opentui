@@ -52,8 +52,8 @@ jobs:
             container: oven/bun:alpine
           - os: macos-latest
             name: darwin-arm64
-          - os: macos-13
-            name: darwin-x64
+          # darwin-x64 removed: macos-13 is deprecated with no free x64 runner available
+          # darwin-arm64 provides sufficient macOS coverage
           - os: windows-latest
             name: win32-x64
     runs-on: ${{ matrix.os }}
