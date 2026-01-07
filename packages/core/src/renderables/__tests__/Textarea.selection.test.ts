@@ -5,6 +5,10 @@ import { RGBA } from "../../lib/RGBA"
 import { OptimizedBuffer } from "../../buffer"
 import { TextRenderable } from "../Text"
 
+// Skip mouse drag tests on Windows due to Bun stdin escape sequence handling issues
+// See: https://github.com/oven-sh/bun/issues/22285
+const isWindows = process.platform === "win32"
+
 let currentRenderer: TestRenderer
 let renderOnce: () => Promise<void>
 let currentMouse: MockMouse
@@ -305,7 +309,7 @@ describe("Textarea - Selection Tests", () => {
       expect(sel!.start).toBeGreaterThanOrEqual(viewport.offsetX)
     })
 
-    it("should render selection highlighting at correct screen position with viewport scroll", async () => {
+    it.skipIf(isWindows)("should render selection highlighting at correct screen position with viewport scroll", async () => {
       const buffer = OptimizedBuffer.create(80, 24, "wcwidth")
 
       const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
@@ -418,7 +422,7 @@ describe("Textarea - Selection Tests", () => {
       expect(sel!.end - sel!.start).toBe(5)
     })
 
-    it("should handle mouse drag selection with scrolled viewport using correct offset", async () => {
+    it.skipIf(isWindows)("should handle mouse drag selection with scrolled viewport using correct offset", async () => {
       const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
         initialValue: Array.from({ length: 30 }, (_, i) => `AAAA${i}`).join("\n"),
         width: 40,
