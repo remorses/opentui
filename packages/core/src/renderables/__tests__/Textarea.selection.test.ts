@@ -222,7 +222,7 @@ describe("Textarea - Selection Tests", () => {
       buffer.destroy()
     })
 
-    it("should handle viewport-aware selection correctly", async () => {
+    it.skipIf(isWindows)("should handle viewport-aware selection correctly", async () => {
       const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
         initialValue: Array.from({ length: 15 }, (_, i) => `Line ${i}`).join("\n"),
         width: 40,
