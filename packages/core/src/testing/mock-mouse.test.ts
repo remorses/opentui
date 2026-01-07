@@ -111,7 +111,7 @@ describe("mock-mouse", () => {
     // Check that drag events have the motion flag (32)
     for (let i = 1; i < mockRenderer.emittedData.length - 1; i++) {
       const event = mockRenderer.emittedData[i].toString()
-      expect(event).toMatch(/\x1b\[<32;\d+;\d+m/) // Should have motion flag (32) and release (m)
+      expect(event).toMatch(/\x1b\[<32;\d+;\d+M/) // Should have motion flag (32) and press (M) since button is held
     }
 
     const lastEvent = mockRenderer.emittedData[mockRenderer.emittedData.length - 1].toString()
@@ -146,7 +146,7 @@ describe("mock-mouse", () => {
     await mockMouse.moveTo(15, 8)
 
     expect(mockRenderer.emittedData[0].toString()).toBe("\x1b[<0;6;6M") // down
-    expect(mockRenderer.emittedData[1].toString()).toBe("\x1b[<32;16;9m") // drag (32 = motion flag, no button 3)
+    expect(mockRenderer.emittedData[1].toString()).toBe("\x1b[<32;16;9M") // drag (32 = motion flag, M since button held)
   })
 
   test("getCurrentPosition tracks position", async () => {
