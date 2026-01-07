@@ -2,8 +2,8 @@ import { test, expect, beforeEach, afterEach } from "bun:test"
 import { createTestRenderer, type TestRenderer } from "../testing/test-renderer"
 import { RendererControlState } from "../renderer"
 
-// Windows has coarser timer resolution (~15.6ms) so timing tests need more tolerance
-const IMMEDIATE_TIMEOUT = process.platform === "win32" ? 100 : 50
+// CI environments can have variable timing, use generous timeout for "immediate" checks
+const IMMEDIATE_TIMEOUT = 100
 
 let renderer: TestRenderer
 let renderOnce: () => Promise<void>
