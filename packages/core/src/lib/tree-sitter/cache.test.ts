@@ -212,8 +212,12 @@ describe("TreeSitterClient Caching", () => {
   })
 
   test("should handle directory creation errors gracefully", async () => {
-    const invalidDataPath = "/invalid/path/that/cannot/be/created"
-    const client = new TreeSitterClient({ dataPath: invalidDataPath })
+    // Use a file path as dataPath - can't create a directory where a file exists
+    // This works on all platforms (linux, musl, darwin, windows)
+    const filePath = join(tmpdir(), "tree-sitter-test-file-" + Math.random().toString(36).slice(2))
+    await Bun.write(filePath, "test")
+
+    const client = new TreeSitterClient({ dataPath: filePath })
 
     await expect(client.initialize()).rejects.toThrow()
 

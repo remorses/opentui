@@ -1,6 +1,34 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+// Suppress ghostty-vt logs. Zig's std.log calls `@import("root").std_options.logFn`,
+// so defining this in the root file (lib.zig) overrides logging for all modules.
+pub const std_options: std.Options = .{
+    .logFn = struct {
+        pub fn logFn(
+            comptime level: std.log.Level,
+            comptime scope: @Type(.enum_literal),
+            comptime format: []const u8,
+            args: anytype,
+        ) void {
+            // Suppress ghostty-vt related scopes
+            const scope_name = @tagName(scope);
+            const suppressed = std.mem.eql(u8, scope_name, "osc") or
+                std.mem.eql(u8, scope_name, "terminal") or
+                std.mem.eql(u8, scope_name, "stream") or
+                std.mem.eql(u8, scope_name, "page") or
+                std.mem.eql(u8, scope_name, "sgr") or
+                std.mem.eql(u8, scope_name, "kitty") or
+                std.mem.eql(u8, scope_name, "csi") or
+                std.mem.eql(u8, scope_name, "modes");
+            if (suppressed) return;
+
+            // Use default logging for other scopes (opentui's own logs)
+            std.log.defaultLog(level, scope, format, args);
+        }
+    }.logFn,
+};
+
 const ansi = @import("ansi.zig");
 const buffer = @import("buffer.zig");
 const renderer = @import("renderer.zig");
@@ -16,21 +44,25 @@ const utf8 = @import("utf8.zig");
 const logger = @import("logger.zig");
 const event_bus = @import("event-bus.zig");
 const utils = @import("utils.zig");
+const ghostty = @import("ghostty-vt");
+const vterm = @import("vterm.zig");
 
 pub const OptimizedBuffer = buffer.OptimizedBuffer;
 pub const CliRenderer = renderer.CliRenderer;
 pub const Terminal = terminal.Terminal;
 pub const RGBA = buffer.RGBA;
 
-export fn setLogCallback(callback: ?*const fn (level: u8, msgPtr: [*]const u8, msgLen: usize) callconv(.C) void) void {
+export fn setLogCallback(callback: ?*const fn (level: u8, msgPtr: [*]const u8, msgLen: usize) callconv(.c) void) void {
     logger.setLogCallback(callback);
 }
 
-export fn setEventCallback(callback: ?*const fn (namePtr: [*]const u8, nameLen: usize, dataPtr: [*]const u8, dataLen: usize) callconv(.C) void) void {
+export fn setEventCallback(callback: ?*const fn (namePtr: [*]const u8, nameLen: usize, dataPtr: [*]const u8, dataLen: usize) callconv(.c) void) void {
     event_bus.setEventCallback(callback);
 }
 
-var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const globalAllocator = gpa.allocator();
+var arena = std.heap.ArenaAllocator.init(globalAllocator);
 const globalArena = arena.allocator();
 
 export fn getArenaAllocatedBytes() usize {
@@ -45,7 +77,7 @@ export fn createRenderer(width: u32, height: u32, testing: bool) ?*renderer.CliR
 
     const pool = gp.initGlobalPool(globalArena);
     _ = link.initGlobalLinkPool(globalArena);
-    return renderer.CliRenderer.create(std.heap.page_allocator, width, height, pool, testing) catch |err| {
+    return renderer.CliRenderer.create(globalAllocator, width, height, pool, testing) catch |err| {
         logger.err("Failed to create renderer: {}", .{err});
         return null;
     };
@@ -83,6 +115,25 @@ export fn getCurrentBuffer(rendererPtr: *renderer.CliRenderer) *buffer.Optimized
     return rendererPtr.getCurrentBuffer();
 }
 
+const OutputSlice = extern struct {
+    ptr: [*]const u8,
+    len: usize,
+};
+
+export fn getLastOutputForTest(rendererPtr: *renderer.CliRenderer, outSlice: *OutputSlice) void {
+    const output = rendererPtr.getLastOutputForTest();
+    outSlice.ptr = output.ptr;
+    outSlice.len = output.len;
+}
+
+export fn setHyperlinksCapability(rendererPtr: *renderer.CliRenderer, enabled: bool) void {
+    rendererPtr.terminal.caps.hyperlinks = enabled;
+}
+
+export fn clearGlobalLinkPool() void {
+    link.deinitGlobalLinkPool();
+}
+
 export fn getBufferWidth(bufferPtr: *buffer.OptimizedBuffer) u32 {
     return bufferPtr.width;
 }
@@ -106,7 +157,7 @@ export fn createOptimizedBuffer(width: u32, height: u32, respectAlpha: bool, wid
     const wMethod: utf8.WidthMethod = if (widthMethod == 0) .wcwidth else .unicode;
     const id = idPtr[0..idLen];
 
-    return buffer.OptimizedBuffer.init(std.heap.page_allocator, width, height, .{
+    return buffer.OptimizedBuffer.init(globalAllocator, width, height, .{
         .respectAlpha = respectAlpha,
         .pool = pool,
         .width_method = wMethod,
@@ -254,9 +305,9 @@ export fn clearTerminal(rendererPtr: *renderer.CliRenderer) void {
 
 export fn setTerminalTitle(rendererPtr: *renderer.CliRenderer, titlePtr: [*]const u8, titleLen: usize) void {
     const title = titlePtr[0..titleLen];
-    var bufferedWriter = &rendererPtr.stdoutWriter;
-    const writer = bufferedWriter.writer();
-    rendererPtr.terminal.setTerminalTitle(writer.any(), title);
+    var stdoutWriter = std.fs.File.stdout().writer(&rendererPtr.stdoutBuffer);
+    const writer = &stdoutWriter.interface;
+    rendererPtr.terminal.setTerminalTitle(writer, title);
 }
 
 // Buffer functions
@@ -504,7 +555,7 @@ export fn createTextBuffer(widthMethod: u8) ?*text_buffer.UnifiedTextBuffer {
     const pool = gp.initGlobalPool(globalArena);
     const wMethod: utf8.WidthMethod = if (widthMethod == 0) .wcwidth else .unicode;
 
-    const tb = text_buffer.UnifiedTextBuffer.init(std.heap.page_allocator, pool, wMethod) catch {
+    const tb = text_buffer.UnifiedTextBuffer.init(globalAllocator, pool, wMethod) catch {
         return null;
     };
 
@@ -614,7 +665,7 @@ export fn textBufferGetPlainText(tb: *text_buffer.UnifiedTextBuffer, outPtr: [*]
 
 // TextBufferView functions (Array-based for backward compatibility)
 export fn createTextBufferView(tb: *text_buffer.UnifiedTextBuffer) ?*text_buffer_view.UnifiedTextBufferView {
-    const view = text_buffer_view.UnifiedTextBufferView.init(std.heap.page_allocator, tb) catch {
+    const view = text_buffer_view.UnifiedTextBufferView.init(globalAllocator, tb) catch {
         return null;
     };
     return view;
@@ -762,7 +813,7 @@ export fn createEditBuffer(widthMethod: u8) ?*edit_buffer_mod.EditBuffer {
     const wMethod: utf8.WidthMethod = if (widthMethod == 0) .wcwidth else .unicode;
 
     return edit_buffer_mod.EditBuffer.init(
-        std.heap.page_allocator,
+        globalAllocator,
         pool,
         wMethod,
     ) catch null;
@@ -1322,8 +1373,7 @@ export fn textBufferGetLineHighlightsPtr(
         return null;
     }
 
-    const alloc = std.heap.page_allocator;
-    var slice = alloc.alloc(ExternalHighlight, highs.len) catch return null;
+    var slice = globalAllocator.alloc(ExternalHighlight, highs.len) catch return null;
 
     for (highs, 0..) |hl, i| {
         slice[i] = .{
@@ -1340,8 +1390,7 @@ export fn textBufferGetLineHighlightsPtr(
 }
 
 export fn textBufferFreeLineHighlights(ptr: [*]const ExternalHighlight, count: usize) void {
-    const alloc = std.heap.page_allocator;
-    alloc.free(@constCast(ptr)[0..count]);
+    globalAllocator.free(@constCast(ptr)[0..count]);
 }
 
 export fn textBufferGetHighlightCount(tb: *text_buffer.UnifiedTextBuffer) u32 {
@@ -1360,7 +1409,7 @@ export fn textBufferGetTextRangeByCoords(tb: *text_buffer.UnifiedTextBuffer, sta
 
 // SyntaxStyle functions
 export fn createSyntaxStyle() ?*syntax_style.SyntaxStyle {
-    return syntax_style.SyntaxStyle.init(std.heap.page_allocator) catch |err| {
+    return syntax_style.SyntaxStyle.init(globalAllocator) catch |err| {
         logger.err("Failed to create SyntaxStyle: {}", .{err});
         return null;
     };
@@ -1408,16 +1457,16 @@ export fn encodeUnicode(
     const is_ascii_only = utf8.isAsciiOnly(text);
 
     // Find grapheme info
-    var grapheme_list = std.ArrayList(utf8.GraphemeInfo).init(std.heap.page_allocator);
-    defer grapheme_list.deinit();
+    var grapheme_list: std.ArrayListUnmanaged(utf8.GraphemeInfo) = .{};
+    defer grapheme_list.deinit(globalAllocator);
 
     const tab_width: u8 = 2;
-    utf8.findGraphemeInfo(text, tab_width, is_ascii_only, wMethod, &grapheme_list) catch return false;
+    utf8.findGraphemeInfo(text, tab_width, is_ascii_only, wMethod, globalAllocator, &grapheme_list) catch return false;
     const specials = grapheme_list.items;
 
     // Allocate output array
     const estimated_count = if (is_ascii_only) text.len else text.len * 2;
-    var result = std.heap.page_allocator.alloc(EncodedChar, estimated_count) catch return false;
+    var result = globalAllocator.alloc(EncodedChar, estimated_count) catch return false;
     var result_idx: usize = 0;
     var success = false;
     var pending_gid: ?u32 = null; // Track grapheme allocated but not yet stored in result
@@ -1440,7 +1489,7 @@ export fn encodeUnicode(
                     pool.decref(gid) catch {};
                 }
             }
-            std.heap.page_allocator.free(result);
+            globalAllocator.free(result);
         }
     }
 
@@ -1494,7 +1543,7 @@ export fn encodeUnicode(
         // Ensure we have space
         if (result_idx >= result.len) {
             const new_len = result.len * 2;
-            result = std.heap.page_allocator.realloc(result, new_len) catch return false;
+            result = globalAllocator.realloc(result, new_len) catch return false;
         }
 
         result[result_idx] = EncodedChar{
@@ -1507,7 +1556,7 @@ export fn encodeUnicode(
     }
 
     // Trim to actual size
-    result = std.heap.page_allocator.realloc(result, result_idx) catch result;
+    result = globalAllocator.realloc(result, result_idx) catch result;
 
     outPtr.* = result.ptr;
     outLenPtr.* = result_idx;
@@ -1530,7 +1579,7 @@ export fn freeUnicode(charsPtr: [*]const EncodedChar, charsLen: usize) void {
     }
 
     // Free the array itself
-    std.heap.page_allocator.free(chars);
+    globalAllocator.free(chars);
 }
 
 export fn bufferDrawChar(
@@ -1545,4 +1594,73 @@ export fn bufferDrawChar(
     const rgbaFg = utils.f32PtrToRGBA(fg);
     const rgbaBg = utils.f32PtrToRGBA(bg);
     bufferPtr.drawChar(char, x, y, rgbaFg, rgbaBg, attributes) catch {};
+}
+
+// =============================================================================
+// VTerm FFI Export Functions
+// =============================================================================
+
+// NOTE: vterm.zig has its own arena allocator, separate from globalArena.
+// This is critical because globalArena is shared with text buffers, editor views, etc.
+// VTerm functions use caller-provides-buffer pattern (outPtr, maxLen) like rest of codebase.
+// No memory management needed - JS owns the buffer.
+
+export fn vtermPtyToJson(
+    input_ptr: [*]const u8,
+    input_len: usize,
+    cols: u16,
+    rows: u16,
+    offset: usize,
+    limit: usize,
+    out_ptr: [*]u8,
+    max_len: usize,
+) usize {
+    return vterm.ptyToJson(input_ptr, input_len, cols, rows, offset, limit, out_ptr, max_len);
+}
+
+export fn vtermPtyToText(
+    input_ptr: [*]const u8,
+    input_len: usize,
+    cols: u16,
+    rows: u16,
+    out_ptr: [*]u8,
+    max_len: usize,
+) usize {
+    return vterm.ptyToText(input_ptr, input_len, cols, rows, out_ptr, max_len);
+}
+
+export fn vtermCreateTerminal(id: u32, cols: u32, rows: u32) bool {
+    return vterm.createTerminal(id, cols, rows);
+}
+
+export fn vtermDestroyTerminal(id: u32) void {
+    vterm.destroyTerminal(id);
+}
+
+export fn vtermFeedTerminal(id: u32, data_ptr: [*]const u8, data_len: usize) bool {
+    return vterm.feedTerminal(id, data_ptr, data_len);
+}
+
+export fn vtermResizeTerminal(id: u32, cols: u32, rows: u32) bool {
+    return vterm.resizeTerminal(id, cols, rows);
+}
+
+export fn vtermResetTerminal(id: u32) bool {
+    return vterm.resetTerminal(id);
+}
+
+export fn vtermGetTerminalJson(id: u32, offset: u32, limit: u32, out_ptr: [*]u8, max_len: usize) usize {
+    return vterm.getTerminalJson(id, offset, limit, out_ptr, max_len);
+}
+
+export fn vtermGetTerminalText(id: u32, out_ptr: [*]u8, max_len: usize) usize {
+    return vterm.getTerminalText(id, out_ptr, max_len);
+}
+
+export fn vtermGetTerminalCursor(id: u32, out_ptr: [*]u8, max_len: usize) usize {
+    return vterm.getTerminalCursor(id, out_ptr, max_len);
+}
+
+export fn vtermIsTerminalReady(id: u32) i32 {
+    return vterm.isTerminalReady(id);
 }

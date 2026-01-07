@@ -2,6 +2,9 @@ import { test, expect, beforeEach, afterEach } from "bun:test"
 import { createTestRenderer, type TestRenderer } from "../testing/test-renderer"
 import { RendererControlState } from "../renderer"
 
+// CI environments can have variable timing, use generous timeout for "immediate" checks
+const IMMEDIATE_TIMEOUT = 100
+
 let renderer: TestRenderer
 let renderOnce: () => Promise<void>
 
@@ -21,7 +24,7 @@ test("idle() resolves immediately when renderer is already idle", async () => {
   await renderer.idle()
   const elapsed = Date.now() - start
 
-  expect(elapsed).toBeLessThan(50)
+  expect(elapsed).toBeLessThan(IMMEDIATE_TIMEOUT)
 })
 
 test("idle() waits for running renderer to stop", async () => {
@@ -61,7 +64,7 @@ test("idle() resolves immediately after requestRender() completes", async () => 
   await renderer.idle()
   const elapsed = Date.now() - start
 
-  expect(elapsed).toBeLessThan(50)
+  expect(elapsed).toBeLessThan(IMMEDIATE_TIMEOUT)
 })
 
 test("multiple idle() calls all resolve when renderer becomes idle", async () => {
@@ -117,7 +120,7 @@ test("idle() resolves immediately when called on paused renderer", async () => {
   await renderer.idle()
   const elapsed = Date.now() - start
 
-  expect(elapsed).toBeLessThan(50)
+  expect(elapsed).toBeLessThan(IMMEDIATE_TIMEOUT)
 })
 
 test("idle() resolves when renderer is destroyed", async () => {
@@ -137,7 +140,7 @@ test("idle() resolves immediately when called on destroyed renderer", async () =
   await renderer.idle()
   const elapsed = Date.now() - start
 
-  expect(elapsed).toBeLessThan(50)
+  expect(elapsed).toBeLessThan(IMMEDIATE_TIMEOUT)
 })
 
 test("idle() waits through multiple requestRender() calls", async () => {

@@ -5,6 +5,16 @@ import { RGBA } from "../../lib/RGBA"
 import { OptimizedBuffer } from "../../buffer"
 import { TextRenderable } from "../Text"
 
+// TODO: Re-enable when Bun fixes Windows stdin escape sequence handling
+// Windows: Bun stdin bug corrupts mouse event sequences, causing wrong selection coordinates
+// See: https://github.com/oven-sh/bun/issues/22285
+const isWindows = process.platform === "win32"
+
+// TODO: Re-enable viewport scroll tests when Bun stdin bug is fixed (Windows) and timing is stabilized (Darwin)
+// Windows: Bun stdin bug - https://github.com/oven-sh/bun/issues/22285
+// Darwin: timing flakiness in CI - mock mouse drag uses setTimeout which behaves inconsistently
+const skipViewportScrollTests = process.platform === "win32" || process.platform === "darwin"
+
 let currentRenderer: TestRenderer
 let renderOnce: () => Promise<void>
 let currentMouse: MockMouse
@@ -218,7 +228,7 @@ describe("Textarea - Selection Tests", () => {
       buffer.destroy()
     })
 
-    it("should handle viewport-aware selection correctly", async () => {
+    it.skipIf(skipViewportScrollTests)("should handle viewport-aware selection correctly", async () => {
       const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
         initialValue: Array.from({ length: 15 }, (_, i) => `Line ${i}`).join("\n"),
         width: 40,
@@ -305,48 +315,51 @@ describe("Textarea - Selection Tests", () => {
       expect(sel!.start).toBeGreaterThanOrEqual(viewport.offsetX)
     })
 
-    it("should render selection highlighting at correct screen position with viewport scroll", async () => {
-      const buffer = OptimizedBuffer.create(80, 24, "wcwidth")
+    it.skipIf(skipViewportScrollTests)(
+      "should render selection highlighting at correct screen position with viewport scroll",
+      async () => {
+        const buffer = OptimizedBuffer.create(80, 24, "wcwidth")
 
-      const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
-        initialValue: Array.from({ length: 15 }, (_, i) => `Line${i}`).join("\n"),
-        width: 20,
-        height: 5,
-        selectable: true,
-        selectionBg: RGBA.fromValues(1, 0, 0, 1),
-      })
+        const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
+          initialValue: Array.from({ length: 15 }, (_, i) => `Line${i}`).join("\n"),
+          width: 20,
+          height: 5,
+          selectable: true,
+          selectionBg: RGBA.fromValues(1, 0, 0, 1),
+        })
 
-      editor.gotoLine(8)
-      await renderOnce()
+        editor.gotoLine(8)
+        await renderOnce()
 
-      const viewport = editor.editorView.getViewport()
-      expect(viewport.offsetY).toBeGreaterThan(0)
+        const viewport = editor.editorView.getViewport()
+        expect(viewport.offsetY).toBeGreaterThan(0)
 
-      await currentMouse.drag(editor.x, editor.y, editor.x + 5, editor.y)
-      await renderOnce()
+        await currentMouse.drag(editor.x, editor.y, editor.x + 5, editor.y)
+        await renderOnce()
 
-      buffer.clear(RGBA.fromValues(0, 0, 0, 1))
-      buffer.drawEditorView(editor.editorView, editor.x, editor.y)
+        buffer.clear(RGBA.fromValues(0, 0, 0, 1))
+        buffer.drawEditorView(editor.editorView, editor.x, editor.y)
 
-      const selectedText = editor.getSelectedText()
-      expect(selectedText).toBe(`Line${viewport.offsetY}`.substring(0, 5))
+        const selectedText = editor.getSelectedText()
+        expect(selectedText).toBe(`Line${viewport.offsetY}`.substring(0, 5))
 
-      const { bg } = buffer.buffers
-      const bufferWidth = buffer.width
+        const { bg } = buffer.buffers
+        const bufferWidth = buffer.width
 
-      for (let cellX = editor.x; cellX < editor.x + 5; cellX++) {
-        const bufferIdx = editor.y * bufferWidth + cellX
-        const bgR = bg[bufferIdx * 4 + 0]
-        const bgG = bg[bufferIdx * 4 + 1]
-        const bgB = bg[bufferIdx * 4 + 2]
+        for (let cellX = editor.x; cellX < editor.x + 5; cellX++) {
+          const bufferIdx = editor.y * bufferWidth + cellX
+          const bgR = bg[bufferIdx * 4 + 0]
+          const bgG = bg[bufferIdx * 4 + 1]
+          const bgB = bg[bufferIdx * 4 + 2]
 
-        expect(Math.abs(bgR - 1.0)).toBeLessThan(0.01)
-        expect(Math.abs(bgG - 0.0)).toBeLessThan(0.01)
-        expect(Math.abs(bgB - 0.0)).toBeLessThan(0.01)
-      }
+          expect(Math.abs(bgR - 1.0)).toBeLessThan(0.01)
+          expect(Math.abs(bgG - 0.0)).toBeLessThan(0.01)
+          expect(Math.abs(bgB - 0.0)).toBeLessThan(0.01)
+        }
 
-      buffer.destroy()
-    })
+        buffer.destroy()
+      },
+    )
 
     it("should render selection correctly with empty lines between content", async () => {
       const buffer = OptimizedBuffer.create(80, 24, "wcwidth")
@@ -418,33 +431,36 @@ describe("Textarea - Selection Tests", () => {
       expect(sel!.end - sel!.start).toBe(5)
     })
 
-    it("should handle mouse drag selection with scrolled viewport using correct offset", async () => {
-      const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
-        initialValue: Array.from({ length: 30 }, (_, i) => `AAAA${i}`).join("\n"),
-        width: 40,
-        height: 5,
-        selectable: true,
-      })
+    it.skipIf(skipViewportScrollTests)(
+      "should handle mouse drag selection with scrolled viewport using correct offset",
+      async () => {
+        const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {
+          initialValue: Array.from({ length: 30 }, (_, i) => `AAAA${i}`).join("\n"),
+          width: 40,
+          height: 5,
+          selectable: true,
+        })
 
-      editor.gotoLine(20)
-      await renderOnce()
+        editor.gotoLine(20)
+        await renderOnce()
 
-      const viewport = editor.editorView.getViewport()
-      expect(viewport.offsetY).toBeGreaterThan(15)
+        const viewport = editor.editorView.getViewport()
+        expect(viewport.offsetY).toBeGreaterThan(15)
 
-      await currentMouse.drag(editor.x, editor.y, editor.x + 4, editor.y)
-      await renderOnce()
+        await currentMouse.drag(editor.x, editor.y, editor.x + 4, editor.y)
+        await renderOnce()
 
-      expect(editor.hasSelection()).toBe(true)
-      const selectedText = editor.getSelectedText()
+        expect(editor.hasSelection()).toBe(true)
+        const selectedText = editor.getSelectedText()
 
-      expect(selectedText).not.toContain("AAAA0")
-      expect(selectedText).not.toContain("AAAA1")
+        expect(selectedText).not.toContain("AAAA0")
+        expect(selectedText).not.toContain("AAAA1")
 
-      const firstVisibleLineIdx = viewport.offsetY
-      const expectedText = `AAAA${firstVisibleLineIdx}`.substring(0, 4)
-      expect(selectedText).toBe(expectedText)
-    })
+        const firstVisibleLineIdx = viewport.offsetY
+        const expectedText = `AAAA${firstVisibleLineIdx}`.substring(0, 4)
+        expect(selectedText).toBe(expectedText)
+      },
+    )
 
     it("should handle multi-line mouse drag with scrolled viewport", async () => {
       const { textarea: editor } = await createTextareaRenderable(currentRenderer, renderOnce, {

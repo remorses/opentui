@@ -2,6 +2,9 @@ import { describe, test, expect } from "bun:test"
 import { createMockKeys, KeyCodes } from "./mock-keys"
 import { PassThrough } from "stream"
 
+// Windows has coarser timer resolution (~15.6ms) so timing tests need more tolerance
+const TIMING_TOLERANCE = process.platform === "win32" ? 40 : 20
+
 class MockRenderer {
   public stdin: PassThrough
   public emittedData: Buffer[] = []
@@ -184,7 +187,7 @@ describe("mock-keys", () => {
 
     expect(timestamps).toHaveLength(2)
     expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(8) // Allow some tolerance
-    expect(timestamps[1] - timestamps[0]).toBeLessThan(20)
+    expect(timestamps[1] - timestamps[0]).toBeLessThan(TIMING_TOLERANCE)
   })
 
   test("pressKey with shift modifier", () => {
