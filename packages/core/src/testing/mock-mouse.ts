@@ -77,9 +77,10 @@ export function createMockMouse(renderer: CliRenderer) {
     const ansiY = y + 1
 
     let pressRelease = "M" // Default to press
-    if (type === "up" || type === "move" || type === "drag") {
+    if (type === "up" || type === "move") {
       pressRelease = "m"
     }
+    // Note: "drag" events keep button pressed, so they use "M" not "m"
 
     return `\x1b[<${buttonCode};${ansiX};${ansiY}${pressRelease}`
   }

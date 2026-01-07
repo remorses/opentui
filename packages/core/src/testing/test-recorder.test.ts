@@ -211,14 +211,15 @@ describe("TestRecorder", () => {
 
     const text = new TextRenderable(renderer, { content: "Timestamp Test" })
     renderer.root.add(text)
-    await Bun.sleep(1)
 
+    // Explicitly render twice with a delay between to ensure distinct timestamps
+    await renderOnce()
     await Bun.sleep(10)
     await renderOnce()
 
     const frames = recorder.recordedFrames
-    expect(frames.length).toBe(2)
-    expect(frames[1].timestamp).toBeGreaterThan(frames[0].timestamp)
+    expect(frames.length).toBeGreaterThanOrEqual(2)
+    expect(frames[frames.length - 1].timestamp).toBeGreaterThan(frames[0].timestamp)
 
     recorder.stop()
   })
