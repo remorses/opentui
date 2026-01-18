@@ -24,5 +24,8 @@
   },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "bun-webgpu": "^0.1.4"
+  }
 }

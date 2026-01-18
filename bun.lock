@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "@opentui",
+      "dependencies": {
+        "bun-webgpu": "^0.1.4",
+      },
       "devDependencies": {
         "prettier": "3.6.2",
       },
@@ -18,13 +21,10 @@
         "yoga-layout": "3.2.1",
       },
       "devDependencies": {
-        "@opentuah/web": "workspace:*",
-        "@opentui/react": "workspace:*",
         "@types/bun": "latest",
         "@types/node": "^25.0.3",
         "@types/three": "0.177.0",
         "commander": "^13.1.0",
-        "react": ">=19.0.0",
         "typescript": "^5",
         "web-tree-sitter": "0.25.10",
       },

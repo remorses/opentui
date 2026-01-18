@@ -5,11 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/server.tsx",
-    "start": "bun run src/server.tsx",
-    "build": "bun run build:native && bun run build:client",
-    "build:native": "cd ../core && bun run build:native",
-    "build:client": "bun build src/client.ts --outdir dist --minify",
-    "vercel-build": "cd ../core && bun run build:native && cd ../website"
+    "vercel-build": "bun run --cwd=../core build:native"
   },
   "dependencies": {
     "@opentui/core": "workspace:*",
