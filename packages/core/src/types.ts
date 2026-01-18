@@ -126,6 +126,8 @@ export interface VTermSpan {
   bg: string | null
   flags: number
   width: number
+  /** Per-character cell widths (e.g., 1 for ASCII, 2 for CJK/emoji) */
+  charWidths?: number[]
 }
 
 export interface VTermLine {

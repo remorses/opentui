@@ -397,7 +397,11 @@ export class CanvasRenderer {
     let x = startX
 
     // Render each character
-    for (const char of span.text) {
+    const chars = [...span.text]
+    for (let i = 0; i < chars.length; i++) {
+      const char = chars[i]
+      // Get character cell width from charWidths array, default to 1
+      const charCellWidth = span.charWidths?.[i] ?? 1
       const cellX = x * this.metrics.charWidth
       const cellY = y
 
@@ -405,7 +409,7 @@ export class CanvasRenderer {
       // This ensures text edges blend correctly with the background
       const effectiveBg = bg && bg !== "#00000000" && bg !== "transparent" ? bg : this.backgroundColor
       this.ctx.fillStyle = effectiveBg
-      this.ctx.fillRect(cellX, cellY, this.metrics.charWidth * (span.width || 1), this.metrics.cellHeight)
+      this.ctx.fillRect(cellX, cellY, this.metrics.charWidth * charCellWidth, this.metrics.cellHeight)
 
       // Check for custom glyph
       const customGlyph = customGlyphDefinitions[char]
@@ -426,7 +430,7 @@ export class CanvasRenderer {
         this.ctx.beginPath()
         const underlineY = this.snapToPixel(cellY + this.metrics.baseline + 2)
         this.ctx.moveTo(cellX, underlineY)
-        this.ctx.lineTo(cellX + this.metrics.charWidth, underlineY)
+        this.ctx.lineTo(cellX + this.metrics.charWidth * charCellWidth, underlineY)
         this.ctx.stroke()
       }
 
@@ -437,11 +441,11 @@ export class CanvasRenderer {
         this.ctx.beginPath()
         const strikeY = this.snapToPixel(cellY + this.metrics.cellHeight / 2)
         this.ctx.moveTo(cellX, strikeY)
-        this.ctx.lineTo(cellX + this.metrics.charWidth, strikeY)
+        this.ctx.lineTo(cellX + this.metrics.charWidth * charCellWidth, strikeY)
         this.ctx.stroke()
       }
 
-      x++
+      x += charCellWidth
     }
 
     return x

@@ -194,17 +194,29 @@ export class OptimizedBuffer {
     const text = new TextDecoder().decode(bytes)
     const lines = text.split("\n")
 
-    let cellIdx = 0
+    const CONTINUATION_FLAG = 0xc0000000
+
     for (let y = 0; y < this._height && y < lines.length; y++) {
       const line = lines[y]
-      let x = 0
-      for (const char of line) {
-        if (x >= this._width) break
-        const i = y * this._width + x
-        result[i] = char
-        x++
+      const lineChars = [...line] // Proper code point iteration
+      let charIdx = 0
+
+      // Iterate over cells and match with characters, skipping continuation cells
+      for (let x = 0; x < this._width; x++) {
+        const cellIdx = y * this._width + x
+        const cp = char[cellIdx]
+
+        // Skip continuation cells - they don't have their own character
+        if (((cp & CONTINUATION_FLAG) >>> 0) === CONTINUATION_FLAG) {
+          continue
+        }
+
+        // This cell has a character - consume next char from decoded text
+        if (charIdx < lineChars.length) {
+          result[cellIdx] = lineChars[charIdx]
+          charIdx++
+        }
       }
-      // Fill remaining cells with space (already done by fill)
     }
 
     return result
@@ -220,7 +232,7 @@ export class OptimizedBuffer {
 
     for (let y = 0; y < this._height; y++) {
       const spans: VTermSpan[] = []
-      let currentSpan: VTermSpan | null = null
+      let currentSpan: (VTermSpan & { charWidths: number[] }) | null = null
 
       for (let x = 0; x < this._width; x++) {
         const i = y * this._width + x
@@ -232,9 +244,14 @@ export class OptimizedBuffer {
         // Handle grapheme encoding:
         // - 0xC0000000 flag = continuation cell (skip)
         // - Otherwise use pre-computed resolved char
+        // Note: Use >>> 0 to force unsigned comparison (JS bitwise ops use signed 32-bit)
         const CONTINUATION_FLAG = 0xc0000000
-        if ((cp & CONTINUATION_FLAG) === CONTINUATION_FLAG) {
-          // Continuation cell - part of a wide char, skip
+        if (((cp & CONTINUATION_FLAG) >>> 0) === CONTINUATION_FLAG) {
+          // Continuation cell - part of a wide char, add width to last char
+          if (currentSpan && currentSpan.charWidths.length > 0) {
+            currentSpan.charWidths[currentSpan.charWidths.length - 1] += 1
+            currentSpan.width += 1
+          }
           continue
         }
 
@@ -244,6 +261,7 @@ export class OptimizedBuffer {
         if (currentSpan && currentSpan.fg === cellFg && currentSpan.bg === cellBg && currentSpan.flags === cellFlags) {
           currentSpan.text += cellChar
           currentSpan.width += 1
+          currentSpan.charWidths.push(1)
         } else {
           // Start a new span
           if (currentSpan) {
@@ -255,6 +273,7 @@ export class OptimizedBuffer {
             bg: cellBg,
             flags: cellFlags,
             width: 1,
+            charWidths: [1],
           }
         }
       }

@@ -307,4 +307,67 @@ describe("captureSpans", () => {
     expect(textContent).toContain("🎉")
     expect(textContent).toContain("World")
   })
+
+  test("should include charWidths for wide characters (emoji)", async () => {
+    const text = new TextRenderable(renderer, { content: "A🎉B" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const firstLine = data.lines[0]
+
+    // Find span containing the emoji
+    const emojiSpan = firstLine.spans.find((s) => s.text.includes("🎉"))
+    expect(emojiSpan).toBeDefined()
+    expect(emojiSpan!.charWidths).toBeDefined()
+
+    // Check that charWidths array exists and has correct length
+    const chars = [...emojiSpan!.text]
+    expect(emojiSpan!.charWidths!.length).toBe(chars.length)
+
+    // Find emoji index and verify it has width 2
+    const emojiIndex = chars.findIndex((c) => c === "🎉")
+    if (emojiIndex !== -1) {
+      expect(emojiSpan!.charWidths![emojiIndex]).toBe(2)
+    }
+  })
+
+  test("should include charWidths for CJK characters", async () => {
+    const text = new TextRenderable(renderer, { content: "A世界B" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const firstLine = data.lines[0]
+
+    // Find span containing CJK characters
+    const cjkSpan = firstLine.spans.find((s) => s.text.includes("世"))
+    expect(cjkSpan).toBeDefined()
+    expect(cjkSpan!.charWidths).toBeDefined()
+
+    // Each CJK character should have width 2
+    const chars = [...cjkSpan!.text]
+    for (let i = 0; i < chars.length; i++) {
+      const char = chars[i]
+      const expectedWidth = char === "世" || char === "界" ? 2 : 1
+      expect(cjkSpan!.charWidths![i]).toBe(expectedWidth)
+    }
+  })
+
+  test("should have span width equal to sum of charWidths", async () => {
+    const text = new TextRenderable(renderer, { content: "Hi世界!" })
+    renderer.root.add(text)
+    await renderOnce()
+
+    const data = captureSpans()
+    const firstLine = data.lines[0]
+
+    // Verify that span.width equals sum of charWidths for all spans
+    for (const span of firstLine.spans) {
+      if (span.charWidths) {
+        const sumOfWidths = span.charWidths.reduce((a, b) => a + b, 0)
+        expect(span.width).toBe(sumOfWidths)
+      }
+    }
+  })
 })
