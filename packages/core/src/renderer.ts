@@ -489,8 +489,10 @@ export class CliRenderer extends EventEmitter implements RenderContext {
     this.stdout = stdout
     this.realStdoutWrite = stdout.write
     this.lib = lib
-    this._terminalWidth = stdout.columns
-    this._terminalHeight = stdout.rows
+    // In non-TTY environments (servers, web), stdout.columns/rows are undefined
+    // Fall back to the passed width/height which come from the actual terminal size
+    this._terminalWidth = stdout.columns ?? width
+    this._terminalHeight = stdout.rows ?? height
     this.width = width
     this.height = height
     this._useThread = config.useThread === undefined ? false : config.useThread
