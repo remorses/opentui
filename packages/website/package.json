@@ -11,9 +11,10 @@
     "deployment": "bun run build && fly deploy --local-only"
   },
   "dependencies": {
+    "@opentuah/web": "workspace:*",
     "@opentui/core": "workspace:*",
     "@opentui/react": "workspace:*",
-    "@opentuah/web": "workspace:*"
+    "bun-webgpu": "^0.1.4"
   },
   "devDependencies": {
     "@types/bun": "latest",

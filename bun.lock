@@ -136,6 +136,7 @@
         "@opentuah/web": "workspace:*",
         "@opentui/core": "workspace:*",
         "@opentui/react": "workspace:*",
+        "bun-webgpu": "^0.1.4",
       },
       "devDependencies": {
         "@types/bun": "latest",

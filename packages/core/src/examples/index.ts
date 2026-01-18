@@ -383,7 +383,7 @@ const examples: Example[] = [
   },
 ]
 
-class ExampleSelector {
+export class ExampleSelector {
   private renderer: CliRenderer
   private currentExample: Example | null = null
   private inMenu = true
