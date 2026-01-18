@@ -67,6 +67,10 @@
       "types": "./src/testing.ts",
       "import": "./src/testing.ts"
     },
+    "./examples": {
+      "types": "./src/examples/index.ts",
+      "import": "./src/examples/index.ts"
+    },
     "./parser.worker": {
       "types": "./src/lib/tree-sitter/parser.worker.ts",
       "import": "./src/lib/tree-sitter/parser.worker.ts"

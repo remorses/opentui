@@ -1,0 +1,23 @@
+{
+  "name": "@opentuah/website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/server.tsx",
+    "start": "bun run src/server.tsx",
+    "build": "bun run build:native && bun run build:client",
+    "build:native": "cd ../core && bun run build:native",
+    "build:client": "bun build src/client.ts --outdir dist --minify",
+    "vercel-build": "cd ../core && bun run build:native && cd ../website"
+  },
+  "dependencies": {
+    "@opentui/core": "workspace:*",
+    "@opentui/react": "workspace:*",
+    "@opentuah/web": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.5",
+    "typescript": "^5.0.0"
+  }
+}

@@ -58,14 +58,14 @@ import * as diffDemo from "./diff-demo"
 import * as keypressDebugDemo from "./keypress-debug-demo"
 import { setupCommonDemoKeys } from "./lib/standalone-keys"
 
-interface Example {
+export interface Example {
   name: string
   description: string
   run?: (renderer: CliRenderer) => void
   destroy?: (renderer: CliRenderer) => void
 }
 
-const examples: Example[] = [
+export const examples: Example[] = [
   {
     name: "Golden Star Demo",
     description: "3D golden star with particle effects and animated text celebrating 5000 stars",
@@ -321,7 +321,7 @@ const examples: Example[] = [
   },
 ]
 
-class ExampleSelector {
+export class ExampleSelector {
   private renderer: CliRenderer
   private currentExample: Example | null = null
   private inMenu = true
@@ -349,7 +349,7 @@ class ExampleSelector {
     const { width: titleWidth } = measureText({ text: titleText, font: titleFont })
     const centerX = Math.floor(width / 2) - Math.floor(titleWidth / 2)
 
-    this.title = new ASCIIFontRenderable(renderer, {
+    this.title = new ASCIIFontRenderable(this.renderer, {
       id: "title",
       left: centerX,
       margin: 1,
@@ -367,7 +367,7 @@ class ExampleSelector {
 
     this.createTitle(width, height)
 
-    this.instructions = new TextRenderable(renderer, {
+    this.instructions = new TextRenderable(this.renderer, {
       id: "instructions",
       marginLeft: 2,
       marginRight: 2,
@@ -385,7 +385,7 @@ class ExampleSelector {
       value: example,
     }))
 
-    this.selectBox = new BoxRenderable(renderer, {
+    this.selectBox = new BoxRenderable(this.renderer, {
       id: "example-selector-box",
       margin: 1,
       flexGrow: 1,
@@ -399,7 +399,7 @@ class ExampleSelector {
       border: true,
     })
 
-    this.selectElement = new SelectRenderable(renderer, {
+    this.selectElement = new SelectRenderable(this.renderer, {
       id: "example-selector",
       height: "100%",
       options: selectOptions,
@@ -476,7 +476,7 @@ class ExampleSelector {
       selected.run(this.renderer)
     } else {
       if (!this.notImplementedText) {
-        this.notImplementedText = new TextRenderable(renderer, {
+        this.notImplementedText = new TextRenderable(this.renderer, {
           id: "not-implemented",
           position: "absolute",
           left: 10,
@@ -547,11 +547,14 @@ class ExampleSelector {
   }
 }
 
-const renderer = await createCliRenderer({
-  exitOnCtrlC: false,
-  targetFps: 60,
-  // useAlternateScreen: false,
-})
+// Only run when executed directly (not imported)
+if (import.meta.main) {
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: false,
+    targetFps: 30,
+    // useAlternateScreen: false,
+  })
 
-renderer.setBackgroundColor("transparent")
-new ExampleSelector(renderer)
+  renderer.setBackgroundColor("transparent")
+  new ExampleSelector(renderer)
+}
