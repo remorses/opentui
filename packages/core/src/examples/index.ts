@@ -412,7 +412,7 @@ export class ExampleSelector {
     const width = this.renderer.terminalWidth
 
     // Menu container with column layout
-    this.menuContainer = new BoxRenderable(renderer, {
+    this.menuContainer = new BoxRenderable(this.renderer, {
       id: "example-menu-container",
       flexDirection: "column",
       width: "100%",
@@ -426,7 +426,7 @@ export class ExampleSelector {
     const { width: titleWidth } = measureText({ text: titleText, font: titleFont })
     const centerX = Math.floor(width / 2) - Math.floor(titleWidth / 2)
 
-    this.title = new ASCIIFontRenderable(renderer, {
+    this.title = new ASCIIFontRenderable(this.renderer, {
       id: "example-index-title",
       left: centerX,
       margin: 1,
@@ -438,7 +438,7 @@ export class ExampleSelector {
     this.menuContainer.add(this.title)
 
     // Filter box with border (grows with content)
-    this.filterBox = new BoxRenderable(renderer, {
+    this.filterBox = new BoxRenderable(this.renderer, {
       id: "example-index-filter-box",
       marginLeft: 1,
       marginRight: 1,
@@ -451,7 +451,7 @@ export class ExampleSelector {
     this.menuContainer.add(this.filterBox)
 
     // Filter input inside the box (transparent bg so box bg shows through)
-    this.filterInput = new TextareaRenderable(renderer, {
+    this.filterInput = new TextareaRenderable(this.renderer, {
       id: "example-index-filter-input",
       width: "100%",
       height: 1,
@@ -471,7 +471,7 @@ export class ExampleSelector {
     this.filterInput.focus()
 
     // Select box (grows to fill remaining space)
-    this.selectBox = new BoxRenderable(renderer, {
+    this.selectBox = new BoxRenderable(this.renderer, {
       id: "example-selector-box",
       marginLeft: 1,
       marginRight: 1,
@@ -495,7 +495,7 @@ export class ExampleSelector {
       value: example,
     }))
 
-    this.selectElement = new SelectRenderable(renderer, {
+    this.selectElement = new SelectRenderable(this.renderer, {
       id: "example-selector",
       height: "100%",
       options: selectOptions,
@@ -518,7 +518,7 @@ export class ExampleSelector {
     })
 
     // Instructions at the bottom
-    this.instructions = new TextRenderable(renderer, {
+    this.instructions = new TextRenderable(this.renderer, {
       id: "example-index-instructions",
       height: 1,
       flexShrink: 0,
@@ -654,7 +654,7 @@ export class ExampleSelector {
       selected.run(this.renderer)
     } else {
       if (!this.notImplementedText) {
-        this.notImplementedText = new TextRenderable(renderer, {
+        this.notImplementedText = new TextRenderable(this.renderer, {
           id: "not-implemented",
           position: "absolute",
           left: 10,
@@ -758,11 +758,14 @@ export class ExampleSelector {
   }
 }
 
-const renderer = await createCliRenderer({
-  exitOnCtrlC: false,
-  targetFps: 60,
-  // useAlternateScreen: false,
-})
+// Only run when executed directly, not when imported as a module
+if (import.meta.main) {
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: false,
+    targetFps: 60,
+    // useAlternateScreen: false,
+  })
 
-renderer.setBackgroundColor("transparent")
-new ExampleSelector(renderer)
+  renderer.setBackgroundColor("transparent")
+  new ExampleSelector(renderer)
+}
