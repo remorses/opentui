@@ -151,6 +151,23 @@ export class SelectRenderable extends Renderable {
     const mergedBindings = mergeKeyBindings(defaultSelectKeybindings, this._keyBindings)
     this._keyBindingsMap = buildKeyBindingsMap(mergedBindings, this._keyAliasMap)
 
+    // Handle mouse/touch clicks on items
+    this.onMouseDown = (event) => {
+      const localY = event.y - this.y
+      const clickedItemIndex = Math.floor(localY / this.linesPerItem)
+      const actualIndex = this.scrollOffset + clickedItemIndex
+
+      if (actualIndex >= 0 && actualIndex < this._options.length) {
+        if (actualIndex === this._selectedIndex) {
+          // Already selected, trigger selection
+          this.selectCurrent()
+        } else {
+          // Select the clicked item
+          this.setSelectedIndex(actualIndex)
+        }
+      }
+    }
+
     this.requestRender() // Initial render needed
   }
 
