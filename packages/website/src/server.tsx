@@ -22,6 +22,9 @@ const ws = opentuiWebSocket({
   },
 })
 
+// Fly.io region from env
+const FLY_REGION = process.env.FLY_REGION || "local"
+
 // Start server
 const port = Number(process.env.PORT) || 3001
 const server = Bun.serve({
@@ -30,7 +33,11 @@ const server = Bun.serve({
 
   routes: {
     "/": homepage,
-    "/health": () => Response.json({ status: "ok", sessions: ws.sessionManager.getSessionCount() }),
+    "/health": () =>
+      Response.json(
+        { status: "ok", region: FLY_REGION, sessions: ws.sessionManager.getSessionCount() },
+        { headers: { "X-Fly-Region": FLY_REGION } },
+      ),
   },
 
   fetch(req, server) {
@@ -39,10 +46,13 @@ const server = Bun.serve({
       return wsResponse
     }
 
-    return new Response("Not found", { status: 404 })
+    return new Response("Not found", { status: 404, headers: { "X-Fly-Region": FLY_REGION } })
   },
 
-  websocket: ws.websocket,
+  websocket: {
+    ...ws.websocket,
+    idleTimeout: 120, // 2 minutes, send ping before this
+  },
 })
 
 // Get local IP

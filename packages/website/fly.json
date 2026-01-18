@@ -5,6 +5,9 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "deploy": {
+    "strategy": "bluegreen"
+  },
   "http_service": {
     "internal_port": 3001,
     "force_https": true,
@@ -12,6 +15,15 @@
     "auto_start_machines": true,
     "min_machines_running": 0,
     "processes": ["app"]
+  },
+  "checks": {
+    "health": {
+      "type": "http",
+      "port": 3001,
+      "path": "/health",
+      "interval": "10s",
+      "timeout": "5s"
+    }
   },
   "vm": [
     {
