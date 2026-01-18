@@ -159,7 +159,8 @@ export function createSession(options: CreateSessionOptions): SessionHandle {
     currentRows = rows
 
     // Create renderer with actual size from client
-    testRenderer = await createTestRenderer({ width: cols, height: rows })
+    // useThread: true ensures writeOut goes through zig which checks testing flag
+    testRenderer = await createTestRenderer({ width: cols, height: rows, useThread: true })
 
     // Hide cursor by default - components will show it when focused
     testRenderer.renderer.setCursorPosition(0, 0, false)
