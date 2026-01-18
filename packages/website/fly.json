@@ -1,9 +1,9 @@
 {
   "app": "opentui",
   "primary_region": "iad",
+  "regions": ["iad", "fra"],
   "build": {
-    "dockerfile": "Dockerfile",
-    "build_target": ""
+    "dockerfile": "Dockerfile"
   },
   "http_service": {
     "internal_port": 3001,

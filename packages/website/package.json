@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/server.tsx",
-    "vercel-build": "bun run --cwd=../core build:native"
+    "build": "bun build --compile --target=bun-linux-x64 src/server.tsx --outfile=dist/server-linux",
+    "build:local": "bun build --compile src/server.tsx --outfile=dist/server",
+    "dev:compiled": "bun run build:local && ./dist/server",
+    "deploy": "bun run build && fly deploy --local-only"
   },
   "dependencies": {
     "@opentui/core": "workspace:*",
