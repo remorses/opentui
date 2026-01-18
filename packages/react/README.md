@@ -1,6 +1,6 @@
 # @opentui/react
 
-A React renderer for building terminal user interfaces using [OpenTUI core](https://github.com/sst/opentui). Create rich, interactive console applications with familiar React patterns and components.
+A React renderer for building terminal user interfaces using [OpenTUI core](https://github.com/anomalyco/opentui). Create rich, interactive console applications with familiar React patterns and components.
 
 ## Installation
 
@@ -985,7 +985,7 @@ bun add --dev react-devtools-core@7
 2. Start the standalone React DevTools:
 
 ```bash
-npx npx react-devtools@7
+npx react-devtools@7
 ```
 
 3. Run your app with the `DEV` environment variable:

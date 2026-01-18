@@ -2,7 +2,7 @@ import type { TextBuffer } from "./text-buffer"
 import { RGBA } from "./lib"
 import { resolveRenderLib, type RenderLib } from "./zig"
 import { type Pointer, toArrayBuffer } from "bun:ffi"
-import { type BorderStyle, type BorderSides, BorderCharArrays } from "./lib"
+import { type BorderStyle, type BorderSides, BorderCharArrays, parseBorderStyle } from "./lib"
 import {
   type WidthMethod,
   TextAttributes,
@@ -455,7 +455,7 @@ export class OptimizedBuffer {
     titleAlignment?: "left" | "center" | "right"
   }): void {
     this.guard()
-    const style = options.borderStyle || "single"
+    const style = parseBorderStyle(options.borderStyle, "single")
     const borderChars: Uint32Array = options.customBorderChars ?? BorderCharArrays[style]
 
     const packedOptions = packDrawOptions(options.border, options.shouldFill ?? false, options.titleAlignment || "left")
