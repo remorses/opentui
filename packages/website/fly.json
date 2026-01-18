@@ -1,7 +1,7 @@
 {
   "app": "opentui",
   "primary_region": "iad",
-  "regions": ["iad", "fra"],
+  "regions": ["iad", "fra", "sjc"],
   "build": {
     "dockerfile": "Dockerfile"
   },
