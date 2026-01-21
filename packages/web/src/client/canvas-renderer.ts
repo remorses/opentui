@@ -505,6 +505,11 @@ export class CanvasRenderer {
     return this._focused
   }
 
+  /** Returns the wrapper element (the actual terminal area) for coordinate calculations */
+  get element(): HTMLElement {
+    return this.wrapper
+  }
+
   setFocused(focused: boolean): void {
     this._focused = focused
     this.cursorEl.style.opacity = focused && this.cursorBlinkVisible ? "1" : "0"

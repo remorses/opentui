@@ -234,8 +234,10 @@ export function connectTerminal(options: ConnectOptions): TerminalConnection {
   }
 
   // Setup mouse input
+  // Use the renderer's wrapper element for coordinate calculations, not the container.
+  // The wrapper is the actual terminal area - the container might have padding or be larger.
   const getTerminalCoords = (e: MouseEvent): { x: number; y: number } => {
-    const rect = container.getBoundingClientRect()
+    const rect = renderer.element.getBoundingClientRect()
     const { charWidth, cellHeight } = renderer.metrics
 
     const x = Math.floor((e.clientX - rect.left) / charWidth)
