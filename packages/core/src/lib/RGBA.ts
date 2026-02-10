@@ -65,6 +65,19 @@ export class RGBA {
     return `rgba(${this.r.toFixed(2)}, ${this.g.toFixed(2)}, ${this.b.toFixed(2)}, ${this.a.toFixed(2)})`
   }
 
+  brighten(factor: number): RGBA {
+    return RGBA.fromValues(
+      Math.min(1, this.r * factor),
+      Math.min(1, this.g * factor),
+      Math.min(1, this.b * factor),
+      this.a,
+    )
+  }
+
+  withAlpha(alpha: number): RGBA {
+    return RGBA.fromValues(this.r, this.g, this.b, alpha)
+  }
+
   equals(other?: RGBA): boolean {
     if (!other) return false
     return this.r === other.r && this.g === other.g && this.b === other.b && this.a === other.a

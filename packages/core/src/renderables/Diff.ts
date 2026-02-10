@@ -1,12 +1,93 @@
 import { Renderable, type RenderableOptions } from "../Renderable"
 import type { RenderContext } from "../types"
 import { CodeRenderable, type CodeOptions } from "./Code"
-import { LineNumberRenderable, type LineSign, type LineColorConfig } from "./LineNumberRenderable"
+import {
+  LineNumberRenderable,
+  type LineSign,
+  type LineColorConfig,
+  type LineInlineHighlight,
+} from "./LineNumberRenderable"
 import { RGBA, parseColor } from "../lib/RGBA"
 import { SyntaxStyle } from "../syntax-style"
 import { parsePatch, type StructuredPatch } from "diff"
 import { TextRenderable } from "./Text"
 import type { TreeSitterClient } from "../lib/tree-sitter"
+
+/** Represents a highlighted span within a line for word-level diff */
+interface InlineHighlight {
+  startCol: number
+  endCol: number
+  type: "added-word" | "removed-word"
+}
+
+/** Represents a range within a string */
+interface IRange {
+  location: number
+  length: number
+}
+
+// Max line length for intra-line diff (matches GitHub.com)
+export const MaxIntraLineDiffStringLength = 1024
+
+// Find changed region by removing common prefix/suffix (GitHub Desktop algorithm)
+export function relativeChanges(stringA: string, stringB: string): { stringARange: IRange; stringBRange: IRange } {
+  const lenA = stringA.length
+  const lenB = stringB.length
+
+  let prefixLen = 0
+  const maxPrefix = Math.min(lenA, lenB)
+  while (prefixLen < maxPrefix && stringA[prefixLen] === stringB[prefixLen]) {
+    prefixLen++
+  }
+
+  let suffixLen = 0
+  const maxSuffix = Math.min(lenA - prefixLen, lenB - prefixLen)
+  while (suffixLen < maxSuffix && stringA[lenA - 1 - suffixLen] === stringB[lenB - 1 - suffixLen]) {
+    suffixLen++
+  }
+
+  return {
+    stringARange: { location: prefixLen, length: lenA - prefixLen - suffixLen },
+    stringBRange: { location: prefixLen, length: lenB - prefixLen - suffixLen },
+  }
+}
+
+// Convert char range to display columns (ASCII fast path, Unicode uses stringWidth)
+function toDisplayColumns(content: string, start: number, length: number): { startCol: number; endCol: number } {
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) > 127) {
+      // Has Unicode - need stringWidth for correct column positions
+      const prefixWidth = Bun.stringWidth(content.slice(0, start))
+      const changedWidth = Bun.stringWidth(content.slice(start, start + length))
+      return { startCol: prefixWidth, endCol: prefixWidth + changedWidth }
+    }
+  }
+  return { startCol: start, endCol: start + length }
+}
+
+// Compute word-level highlights for a pair of changed lines
+export function computeInlineHighlights(
+  oldContent: string,
+  newContent: string,
+): { oldHighlight: InlineHighlight | null; newHighlight: InlineHighlight | null } {
+  if (oldContent === newContent) {
+    return { oldHighlight: null, newHighlight: null }
+  }
+
+  const { stringARange, stringBRange } = relativeChanges(oldContent, newContent)
+
+  const oldHighlight: InlineHighlight | null =
+    stringARange.length > 0
+      ? { ...toDisplayColumns(oldContent, stringARange.location, stringARange.length), type: "removed-word" }
+      : null
+
+  const newHighlight: InlineHighlight | null =
+    stringBRange.length > 0
+      ? { ...toDisplayColumns(newContent, stringBRange.location, stringBRange.length), type: "added-word" }
+      : null
+
+  return { oldHighlight, newHighlight }
+}
 
 interface LogicalLine {
   content: string
@@ -15,6 +96,7 @@ interface LogicalLine {
   color?: string | RGBA
   sign?: LineSign
   type: "context" | "add" | "remove" | "empty"
+  inlineHighlights?: InlineHighlight[]
 }
 
 export interface DiffRenderableOptions extends RenderableOptions<DiffRenderable> {
@@ -47,6 +129,22 @@ export interface DiffRenderableOptions extends RenderableOptions<DiffRenderable>
   removedSignColor?: string | RGBA
   addedLineNumberBg?: string | RGBA
   removedLineNumberBg?: string | RGBA
+  /**
+   * Disable word-level highlighting within modified lines.
+   * When false (default), individual words/characters that changed are highlighted.
+   * @default false
+   */
+  disableWordHighlights?: boolean
+  /**
+   * Background color for added words within modified lines.
+   * @default addedBg.brighten(1.15)
+   */
+  addedWordBg?: string | RGBA
+  /**
+   * Background color for removed words within modified lines.
+   * @default removedBg.brighten(1.15)
+   */
+  removedWordBg?: string | RGBA
 }
 
 export class DiffRenderable extends Renderable {
@@ -81,6 +179,9 @@ export class DiffRenderable extends Renderable {
   private _removedSignColor: RGBA
   private _addedLineNumberBg: RGBA
   private _removedLineNumberBg: RGBA
+  private _disableWordHighlights: boolean
+  private _addedWordBg: RGBA
+  private _removedWordBg: RGBA
 
   private leftSide: LineNumberRenderable | null = null
   private rightSide: LineNumberRenderable | null = null
@@ -135,11 +236,103 @@ export class DiffRenderable extends Renderable {
     this._removedSignColor = parseColor(options.removedSignColor ?? "#ef4444")
     this._addedLineNumberBg = parseColor(options.addedLineNumberBg ?? "transparent")
     this._removedLineNumberBg = parseColor(options.removedLineNumberBg ?? "transparent")
+    this._disableWordHighlights = options.disableWordHighlights ?? false
+    // Small brightness increase (~10-15%) similar to GitHub Desktop's light theme contrast
+    this._addedWordBg = options.addedWordBg ? parseColor(options.addedWordBg) : this._addedBg.brighten(1.15)
+    this._removedWordBg = options.removedWordBg ? parseColor(options.removedWordBg) : this._removedBg.brighten(1.15)
 
     if (this._diff) {
       this.parseDiff()
       this.buildView()
     }
+  }
+
+  private toLineHighlights(highlights: InlineHighlight[], bg: RGBA): LineInlineHighlight[] {
+    return highlights.map((h) => ({ startCol: h.startCol, endCol: h.endCol, bg }))
+  }
+
+  private processChangeBlockWithHighlights(
+    removes: { content: string; lineNum: number }[],
+    adds: { content: string; lineNum: number }[],
+  ): { leftLines: LogicalLine[]; rightLines: LogicalLine[] } {
+    const leftLines: LogicalLine[] = []
+    const rightLines: LogicalLine[] = []
+
+    const maxLength = Math.max(removes.length, adds.length)
+
+    // To match the behavior of github.com, we only highlight differences between
+    // lines on hunks that have the same number of added and deleted lines.
+    const shouldDisplayDiffInChunk = !this._disableWordHighlights && adds.length === removes.length
+
+    // Pre-compute diff tokens for paired lines (matching GitHub Desktop)
+    const diffTokensBefore: (InlineHighlight | null)[] = []
+    const diffTokensAfter: (InlineHighlight | null)[] = []
+
+    if (shouldDisplayDiffInChunk) {
+      for (let i = 0; i < removes.length; i++) {
+        const remove = removes[i]
+        const add = adds[i]
+
+        if (remove.content.length < MaxIntraLineDiffStringLength && add.content.length < MaxIntraLineDiffStringLength) {
+          const { oldHighlight, newHighlight } = computeInlineHighlights(remove.content, add.content)
+          diffTokensBefore[i] = oldHighlight
+          diffTokensAfter[i] = newHighlight
+        } else {
+          diffTokensBefore[i] = null
+          diffTokensAfter[i] = null
+        }
+      }
+    }
+
+    for (let j = 0; j < maxLength; j++) {
+      const remove = j < removes.length ? removes[j] : null
+      const add = j < adds.length ? adds[j] : null
+
+      const leftHighlight = shouldDisplayDiffInChunk && j < diffTokensBefore.length ? diffTokensBefore[j] : null
+      const rightHighlight = shouldDisplayDiffInChunk && j < diffTokensAfter.length ? diffTokensAfter[j] : null
+
+      if (remove) {
+        leftLines.push({
+          content: remove.content,
+          lineNum: remove.lineNum,
+          color: this._removedBg,
+          sign: {
+            after: " -",
+            afterColor: this._removedSignColor,
+          },
+          type: "remove",
+          inlineHighlights: leftHighlight ? [leftHighlight] : [],
+        })
+      } else {
+        leftLines.push({
+          content: "",
+          hideLineNumber: true,
+          type: "empty",
+        })
+      }
+
+      if (add) {
+        rightLines.push({
+          content: add.content,
+          lineNum: add.lineNum,
+          color: this._addedBg,
+          sign: {
+            after: " +",
+            afterColor: this._addedSignColor,
+          },
+          type: "add",
+          inlineHighlights: rightHighlight ? [rightHighlight] : [],
+        })
+      } else {
+        rightLines.push({
+          content: "",
+          hideLineNumber: true,
+          type: "empty",
+        })
+      }
+    }
+
+    return { leftLines, rightLines }
   }
 
   private parseDiff(): void {
@@ -384,6 +577,7 @@ export class DiffRenderable extends Renderable {
     lineNumbers: Map<number, number>,
     hideLineNumbers: Set<number>,
     width: "50%" | "100%",
+    inlineHighlights?: Map<number, LineInlineHighlight[]>,
   ): void {
     const sideRef = side === "left" ? this.leftSide : this.rightSide
     const addedFlag = side === "left" ? this.leftSideAdded : this.rightSideAdded
@@ -399,6 +593,7 @@ export class DiffRenderable extends Renderable {
         lineNumbers,
         lineNumberOffset: 0,
         hideLineNumbers,
+        inlineHighlights,
         width,
         height: "100%",
       })
@@ -418,6 +613,11 @@ export class DiffRenderable extends Renderable {
       sideRef.setLineSigns(lineSigns)
       sideRef.setLineNumbers(lineNumbers)
       sideRef.setHideLineNumbers(hideLineNumbers)
+      if (inlineHighlights) {
+        sideRef.setInlineHighlights(inlineHighlights)
+      } else {
+        sideRef.clearInlineHighlights()
+      }
 
       if (!addedFlag) {
         super.add(sideRef)
@@ -452,6 +652,7 @@ export class DiffRenderable extends Renderable {
     const lineColors = new Map<number, string | RGBA | LineColorConfig>()
     const lineSigns = new Map<number, LineSign>()
     const lineNumbers = new Map<number, number>()
+    const inlineHighlights = new Map<number, LineInlineHighlight[]>()
 
     let lineIndex = 0
 
@@ -459,47 +660,14 @@ export class DiffRenderable extends Renderable {
       let oldLineNum = hunk.oldStart
       let newLineNum = hunk.newStart
 
-      for (const line of hunk.lines) {
+      let i = 0
+      while (i < hunk.lines.length) {
+        const line = hunk.lines[i]
         const firstChar = line[0]
         const content = line.slice(1)
 
-        if (firstChar === "+") {
-          contentLines.push(content)
-          const config: LineColorConfig = {
-            gutter: this._addedLineNumberBg,
-          }
-          if (this._addedContentBg) {
-            config.content = this._addedContentBg
-          } else {
-            config.content = this._addedBg
-          }
-          lineColors.set(lineIndex, config)
-          lineSigns.set(lineIndex, {
-            after: " +",
-            afterColor: this._addedSignColor,
-          })
-          lineNumbers.set(lineIndex, newLineNum)
-          newLineNum++
-          lineIndex++
-        } else if (firstChar === "-") {
-          contentLines.push(content)
-          const config: LineColorConfig = {
-            gutter: this._removedLineNumberBg,
-          }
-          if (this._removedContentBg) {
-            config.content = this._removedContentBg
-          } else {
-            config.content = this._removedBg
-          }
-          lineColors.set(lineIndex, config)
-          lineSigns.set(lineIndex, {
-            after: " -",
-            afterColor: this._removedSignColor,
-          })
-          lineNumbers.set(lineIndex, oldLineNum)
-          oldLineNum++
-          lineIndex++
-        } else if (firstChar === " ") {
+        if (firstChar === " ") {
+          // Context line
           contentLines.push(content)
           const config: LineColorConfig = {
             gutter: this._lineNumberBg,
@@ -514,6 +682,66 @@ export class DiffRenderable extends Renderable {
           oldLineNum++
           newLineNum++
           lineIndex++
+          i++
+        } else if (firstChar === "\\") {
+          // Skip "\ No newline at end of file"
+          i++
+        } else {
+          // Collect consecutive removes and adds as a block
+          const removes: { content: string; lineNum: number }[] = []
+          const adds: { content: string; lineNum: number }[] = []
+
+          while (i < hunk.lines.length) {
+            const currentLine = hunk.lines[i]
+            const currentChar = currentLine[0]
+
+            if (currentChar === " " || currentChar === "\\") {
+              break
+            }
+
+            const currentContent = currentLine.slice(1)
+
+            if (currentChar === "-") {
+              removes.push({ content: currentContent, lineNum: oldLineNum })
+              oldLineNum++
+            } else if (currentChar === "+") {
+              adds.push({ content: currentContent, lineNum: newLineNum })
+              newLineNum++
+            }
+            i++
+          }
+
+          const processedBlock = this.processChangeBlockWithHighlights(removes, adds)
+
+          for (const line of processedBlock.leftLines) {
+            if (line.type === "empty") continue
+            contentLines.push(line.content)
+            lineColors.set(lineIndex, {
+              gutter: this._removedLineNumberBg,
+              content: this._removedContentBg ?? this._removedBg,
+            })
+            lineSigns.set(lineIndex, { after: " -", afterColor: this._removedSignColor })
+            if (line.lineNum !== undefined) lineNumbers.set(lineIndex, line.lineNum)
+            if (line.inlineHighlights?.length) {
+              inlineHighlights.set(lineIndex, this.toLineHighlights(line.inlineHighlights, this._removedWordBg))
+            }
+            lineIndex++
+          }
+
+          for (const line of processedBlock.rightLines) {
+            if (line.type === "empty") continue
+            contentLines.push(line.content)
+            lineColors.set(lineIndex, {
+              gutter: this._addedLineNumberBg,
+              content: this._addedContentBg ?? this._addedBg,
+            })
+            lineSigns.set(lineIndex, { after: " +", afterColor: this._addedSignColor })
+            if (line.lineNum !== undefined) lineNumbers.set(lineIndex, line.lineNum)
+            if (line.inlineHighlights?.length) {
+              inlineHighlights.set(lineIndex, this.toLineHighlights(line.inlineHighlights, this._addedWordBg))
+            }
+            lineIndex++
+          }
         }
       }
     }
@@ -522,7 +750,17 @@ export class DiffRenderable extends Renderable {
 
     const codeRenderable = this.createOrUpdateCodeRenderable("left", content, this._wrapMode)
 
-    this.createOrUpdateSide("left", codeRenderable, lineColors, lineSigns, lineNumbers, new Set<number>(), "100%")
+    // Create or update LineNumberRenderable (leftSide used for unified view)
+    this.createOrUpdateSide(
+      "left",
+      codeRenderable,
+      lineColors,
+      lineSigns,
+      lineNumbers,
+      new Set<number>(),
+      "100%",
+      inlineHighlights.size > 0 ? inlineHighlights : undefined,
+    )
 
     if (this.rightSide && this.rightSideAdded) {
       super.remove(this.rightSide.id)
@@ -603,46 +841,15 @@ export class DiffRenderable extends Renderable {
             i++
           }
 
-          const maxLength = Math.max(removes.length, adds.length)
+          // Process the change block with word-level highlighting
+          const processedBlock = this.processChangeBlockWithHighlights(removes, adds)
 
-          for (let j = 0; j < maxLength; j++) {
-            if (j < removes.length) {
-              leftLogicalLines.push({
-                content: removes[j].content,
-                lineNum: removes[j].lineNum,
-                color: this._removedBg,
-                sign: {
-                  after: " -",
-                  afterColor: this._removedSignColor,
-                },
-                type: "remove",
-              })
-            } else {
-              leftLogicalLines.push({
-                content: "",
-                hideLineNumber: true,
-                type: "empty",
-              })
-            }
-
-            if (j < adds.length) {
-              rightLogicalLines.push({
-                content: adds[j].content,
-                lineNum: adds[j].lineNum,
-                color: this._addedBg,
-                sign: {
-                  after: " +",
-                  afterColor: this._addedSignColor,
-                },
-                type: "add",
-              })
-            } else {
-              rightLogicalLines.push({
-                content: "",
-                hideLineNumber: true,
-                type: "empty",
-              })
-            }
+          // Add processed lines to output
+          for (const leftLine of processedBlock.leftLines) {
+            leftLogicalLines.push(leftLine)
+          }
+          for (const rightLine of processedBlock.rightLines) {
+            rightLogicalLines.push(rightLine)
           }
         }
       }
@@ -758,6 +965,8 @@ export class DiffRenderable extends Renderable {
     const rightHideLineNumbers = new Set<number>()
     const leftLineNumbers = new Map<number, number>()
     const rightLineNumbers = new Map<number, number>()
+    const leftInlineHighlights = new Map<number, LineInlineHighlight[]>()
+    const rightInlineHighlights = new Map<number, LineInlineHighlight[]>()
 
     finalLeftLines.forEach((line, index) => {
       if (line.lineNum !== undefined) {
@@ -789,6 +998,9 @@ export class DiffRenderable extends Renderable {
       }
       if (line.sign) {
         leftLineSigns.set(index, line.sign)
+      }
+      if (line.inlineHighlights?.length) {
+        leftInlineHighlights.set(index, this.toLineHighlights(line.inlineHighlights, this._removedWordBg))
       }
     })
 
@@ -823,6 +1035,9 @@ export class DiffRenderable extends Renderable {
       if (line.sign) {
         rightLineSigns.set(index, line.sign)
       }
+      if (line.inlineHighlights?.length) {
+        rightInlineHighlights.set(index, this.toLineHighlights(line.inlineHighlights, this._addedWordBg))
+      }
     })
 
     const leftContentFinal = finalLeftLines.map((l) => l.content).join("\n")
@@ -839,6 +1054,7 @@ export class DiffRenderable extends Renderable {
       leftLineNumbers,
       leftHideLineNumbers,
       "50%",
+      leftInlineHighlights.size > 0 ? leftInlineHighlights : undefined,
     )
     this.createOrUpdateSide(
       "right",
@@ -848,6 +1064,7 @@ export class DiffRenderable extends Renderable {
       rightLineNumbers,
       rightHideLineNumbers,
       "50%",
+      rightInlineHighlights.size > 0 ? rightInlineHighlights : undefined,
     )
   }
 
@@ -1133,6 +1350,41 @@ export class DiffRenderable extends Renderable {
       if (this.rightCodeRenderable) {
         this.rightCodeRenderable.fg = parsed
       }
+    }
+  }
+
+  public get disableWordHighlights(): boolean {
+    return this._disableWordHighlights
+  }
+
+  public set disableWordHighlights(value: boolean) {
+    if (this._disableWordHighlights !== value) {
+      this._disableWordHighlights = value
+      this.rebuildView()
+    }
+  }
+
+  public get addedWordBg(): RGBA {
+    return this._addedWordBg
+  }
+
+  public set addedWordBg(value: string | RGBA) {
+    const parsed = parseColor(value)
+    if (this._addedWordBg !== parsed) {
+      this._addedWordBg = parsed
+      this.rebuildView()
+    }
+  }
+
+  public get removedWordBg(): RGBA {
+    return this._removedWordBg
+  }
+
+  public set removedWordBg(value: string | RGBA) {
+    const parsed = parseColor(value)
+    if (this._removedWordBg !== parsed) {
+      this._removedWordBg = parsed
+      this.rebuildView()
     }
   }
 }

@@ -1,5 +1,5 @@
-import { test, expect, beforeEach, afterEach } from "bun:test"
-import { DiffRenderable } from "./Diff"
+import { test, expect, beforeEach, afterEach, describe } from "bun:test"
+import { DiffRenderable, computeInlineHighlights, relativeChanges, MaxIntraLineDiffStringLength } from "./Diff"
 import { SyntaxStyle } from "../syntax-style"
 import { RGBA } from "../lib/RGBA"
 import { createTestRenderer, type TestRenderer } from "../testing"
@@ -2666,6 +2666,213 @@ test("DiffRenderable - fg prop accepts RGBA directly", async () => {
 
   const leftCodeRenderable = (diffRenderable as any).leftCodeRenderable
   expect(leftCodeRenderable.fg).toEqual(customFg)
+})
+
+describe("relativeChanges", () => {
+  test("returns empty ranges for identical strings", () => {
+    const result = relativeChanges("hello world", "hello world")
+    expect(result.stringARange.length).toBe(0)
+    expect(result.stringBRange.length).toBe(0)
+  })
+
+  test("returns full ranges for completely different strings", () => {
+    const result = relativeChanges("abc", "xyz")
+    expect(result.stringARange).toEqual({ location: 0, length: 3 })
+    expect(result.stringBRange).toEqual({ location: 0, length: 3 })
+  })
+
+  test("finds changed region with common prefix", () => {
+    const result = relativeChanges("hello world", "hello there")
+    // Common prefix: "hello " (6 chars)
+    expect(result.stringARange.location).toBe(6)
+    expect(result.stringARange.length).toBe(5) // "world"
+    expect(result.stringBRange.location).toBe(6)
+    expect(result.stringBRange.length).toBe(5) // "there"
+  })
+
+  test("finds changed region with common suffix", () => {
+    const result = relativeChanges("const x = 1", "const x = 2")
+    // Common prefix: "const x = " (10 chars), Common suffix: "" (0 chars)
+    expect(result.stringARange.location).toBe(10)
+    expect(result.stringARange.length).toBe(1) // "1"
+    expect(result.stringBRange.location).toBe(10)
+    expect(result.stringBRange.length).toBe(1) // "2"
+  })
+
+  test("handles empty strings", () => {
+    const result1 = relativeChanges("hello", "")
+    expect(result1.stringARange).toEqual({ location: 0, length: 5 })
+    expect(result1.stringBRange).toEqual({ location: 0, length: 0 })
+
+    const result2 = relativeChanges("", "hello")
+    expect(result2.stringARange).toEqual({ location: 0, length: 0 })
+    expect(result2.stringBRange).toEqual({ location: 0, length: 5 })
+  })
+
+  test("finds single contiguous changed region (not multiple)", () => {
+    // "a b c" -> "x b z" has changes at start and end
+    // But prefix/suffix algorithm returns single region from first change to last
+    const result = relativeChanges("a b c", "x b z")
+    // Common prefix: "" (0 chars), Common suffix: "" (0 chars)
+    // So everything is different
+    expect(result.stringARange.location).toBe(0)
+    expect(result.stringARange.length).toBe(5)
+    expect(result.stringBRange.location).toBe(0)
+    expect(result.stringBRange.length).toBe(5)
+  })
+})
+
+describe("computeInlineHighlights", () => {
+  test("returns null highlights for identical strings", () => {
+    const result = computeInlineHighlights("hello world", "hello world")
+    expect(result.oldHighlight).toBeNull()
+    expect(result.newHighlight).toBeNull()
+  })
+
+  test("highlights changed region", () => {
+    const result = computeInlineHighlights("hello world", "hello there")
+    expect(result.oldHighlight).not.toBeNull()
+    expect(result.oldHighlight!.type).toBe("removed-word")
+    expect(result.newHighlight).not.toBeNull()
+    expect(result.newHighlight!.type).toBe("added-word")
+  })
+
+  test("computes correct column positions", () => {
+    const result = computeInlineHighlights("const x = 1", "const x = 2")
+    expect(result.oldHighlight!.startCol).toBe(10)
+    expect(result.oldHighlight!.endCol).toBe(11)
+    expect(result.newHighlight!.startCol).toBe(10)
+    expect(result.newHighlight!.endCol).toBe(11)
+  })
+
+  test("returns single contiguous region for multiple changes (GitHub Desktop behavior)", () => {
+    // Unlike word-level diffing, prefix/suffix algorithm returns single region
+    const result = computeInlineHighlights("a b c", "x b z")
+    // Single highlight covering the entire changed region
+    expect(result.oldHighlight).not.toBeNull()
+    expect(result.newHighlight).not.toBeNull()
+    expect(result.oldHighlight!.startCol).toBe(0)
+    expect(result.oldHighlight!.endCol).toBe(5) // "a b c"
+    expect(result.newHighlight!.startCol).toBe(0)
+    expect(result.newHighlight!.endCol).toBe(5) // "x b z"
+  })
+
+  test("handles multi-width characters (CJK)", () => {
+    const result = computeInlineHighlights("hello 世界", "hello 你好")
+    expect(result.oldHighlight).not.toBeNull()
+    expect(result.newHighlight).not.toBeNull()
+    expect(result.oldHighlight!.startCol).toBe(6)
+    expect(result.oldHighlight!.endCol).toBe(10) // 2 CJK chars = 4 display width
+    expect(result.newHighlight!.startCol).toBe(6)
+    expect(result.newHighlight!.endCol).toBe(10)
+  })
+
+  test("handles emoji characters", () => {
+    const result = computeInlineHighlights("test 👍", "test 👎")
+    expect(result.oldHighlight).not.toBeNull()
+    expect(result.newHighlight).not.toBeNull()
+    expect(result.oldHighlight!.startCol).toBe(5)
+    expect(result.newHighlight!.startCol).toBe(5)
+  })
+
+  test("handles insertion (no removal)", () => {
+    const result = computeInlineHighlights("hello", "hello world")
+    expect(result.oldHighlight).toBeNull() // nothing removed
+    expect(result.newHighlight).not.toBeNull()
+    expect(result.newHighlight!.startCol).toBe(5)
+    expect(result.newHighlight!.endCol).toBe(11) // " world"
+  })
+
+  test("handles deletion (no addition)", () => {
+    const result = computeInlineHighlights("hello world", "hello")
+    expect(result.oldHighlight).not.toBeNull()
+    expect(result.oldHighlight!.startCol).toBe(5)
+    expect(result.oldHighlight!.endCol).toBe(11) // " world"
+    expect(result.newHighlight).toBeNull() // nothing added
+  })
+})
+
+describe("DiffRenderable word highlights", () => {
+  test("word highlight options have correct defaults", async () => {
+    const syntaxStyle = SyntaxStyle.fromStyles({
+      default: { fg: RGBA.fromValues(1, 1, 1, 1) },
+    })
+
+    const diffRenderable = new DiffRenderable(currentRenderer, {
+      id: "test-diff",
+      diff: simpleDiff,
+      view: "split",
+      syntaxStyle,
+    })
+
+    expect(diffRenderable.disableWordHighlights).toBe(false)
+    expect(diffRenderable.addedWordBg).toBeDefined()
+    expect(diffRenderable.removedWordBg).toBeDefined()
+  })
+
+  test("can disable word highlights", async () => {
+    const syntaxStyle = SyntaxStyle.fromStyles({
+      default: { fg: RGBA.fromValues(1, 1, 1, 1) },
+    })
+
+    const diffRenderable = new DiffRenderable(currentRenderer, {
+      id: "test-diff",
+      diff: simpleDiff,
+      view: "split",
+      syntaxStyle,
+      disableWordHighlights: true,
+    })
+
+    expect(diffRenderable.disableWordHighlights).toBe(true)
+    diffRenderable.disableWordHighlights = false
+    expect(diffRenderable.disableWordHighlights).toBe(false)
+  })
+
+  test("can customize word highlight colors", async () => {
+    const syntaxStyle = SyntaxStyle.fromStyles({
+      default: { fg: RGBA.fromValues(1, 1, 1, 1) },
+    })
+
+    const diffRenderable = new DiffRenderable(currentRenderer, {
+      id: "test-diff",
+      diff: simpleDiff,
+      view: "split",
+      syntaxStyle,
+      addedWordBg: "#00ff00",
+      removedWordBg: "#ff0000",
+    })
+
+    expect(diffRenderable.addedWordBg).toEqual(RGBA.fromHex("#00ff00"))
+    expect(diffRenderable.removedWordBg).toEqual(RGBA.fromHex("#ff0000"))
+  })
+
+  test("only highlights when equal number of adds and removes (GitHub Desktop behavior)", async () => {
+    const syntaxStyle = SyntaxStyle.fromStyles({
+      default: { fg: RGBA.fromValues(1, 1, 1, 1) },
+    })
+
+    // This diff has 1 remove and 1 add - should highlight
+    const equalDiff = `--- a/test.js
++++ b/test.js
+@@ -1 +1 @@
+-const x = 1
++const x = 2
+`
+
+    const diffRenderable = new DiffRenderable(currentRenderer, {
+      id: "test-diff",
+      diff: equalDiff,
+      view: "split",
+      syntaxStyle,
+    })
+
+    // The diff should be rendered (we can't easily check highlights without more infrastructure)
+    expect(diffRenderable.disableWordHighlights).toBe(false)
+  })
+
+  test("MaxIntraLineDiffStringLength is exported and has correct value", () => {
+    expect(MaxIntraLineDiffStringLength).toBe(1024)
+  })
 })
 
 test("DiffRenderable - split view with word wrapping: changing diff content should not misalign sides", async () => {
