@@ -673,6 +673,39 @@ test("list with inline formatting", async () => {
   `)
 })
 
+test("nested unordered list", async () => {
+  const markdown = `- Item 1
+  - Nested A
+  - Nested B
+- Item 2`
+
+  expect(await renderMarkdown(markdown)).toMatchInlineSnapshot(`
+    "
+    - Item 1
+      - Nested A
+      - Nested B
+    - Item 2"
+  `)
+})
+
+test("list item with fenced code block", async () => {
+  const markdown = `- Item with code:
+
+  \`\`\`ts
+  const value = 1
+  console.log(value)
+  \`\`\`
+- Next item`
+
+  expect(await renderMarkdown(markdown)).toMatchInlineSnapshot(`
+    "
+    - Item with code:
+      const value = 1
+      console.log(value)
+    - Next item"
+  `)
+})
+
 // Blockquote tests
 
 test("simple blockquote", async () => {
@@ -682,7 +715,7 @@ test("simple blockquote", async () => {
   expect(await renderMarkdown(markdown)).toMatchInlineSnapshot(`
     "
     > This is a quote
-    spanning multiple lines"
+    > spanning multiple lines"
   `)
 })
 
@@ -814,7 +847,6 @@ Visit [GitHub](https://github.com) for more.
     - inline code support
     - Italic and bold text
 
-
     Code Example
 
     const md = new MarkdownRenderable(ctx, {
@@ -829,6 +861,203 @@ Visit [GitHub](https://github.com) for more.
 
     Press ? for help"
   `)
+})
+
+test("llm-style response with quotes, nested lists, hr, and paragraphs", async () => {
+  const markdown = `Here is the plan:
+
+> We will ship in two phases.
+> Phase one focuses on stability.
+
+- Top item
+  - Nested one
+  - Nested two
+- Second item
+
+---
+
+Final paragraph with closing remarks.`
+
+  expect(await renderMarkdown(markdown)).toMatchInlineSnapshot(`
+    "
+    Here is the plan:
+
+    > We will ship in two phases.
+    > Phase one focuses on stability.
+
+    - Top item
+      - Nested one
+      - Nested two
+    - Second item
+
+    ---
+
+    Final paragraph with closing remarks."
+  `)
+})
+
+test("complex markdown with mixed nodes and nesting", async () => {
+  const markdown = `# Weekly Update
+
+Quick summary for the team with **bold**, *italic*, \`code\`, and ~~strikethrough~~.
+
+## People
+
+- Alice
+  - Role: Tech Lead
+  - Profile: https://example.com/alice
+  - Notes: [handoff doc](https://example.com/alice/handoff)
+- Bob
+  - Role: Infra
+  - Profile: https://example.com/bob
+  - Notes: [runbook](https://example.com/runbook)
+
+> Status call highlights:
+> - On-call load is high
+>   - Add more automation
+>   - Improve alert routing
+> - Task list:
+>   - [ ] Triage paging rules
+>   - [x] Reduce noisy alerts
+>
+> 1. Investigate spikes
+>    1. Check dashboard
+>    2. Review traces
+> 2. Apply fixes
+>
+> Final note with **bold** and \`code\`.
+
+## Metrics
+
+Table below:
+| Metric | Value |
+|---|---|
+| Coverage | 92% |
+| Latency | 120ms |
+
+Links right after table:
+- Dashboard: https://example.com/metrics
+- Incident history: https://example.com/incidents
+
+\`\`\`ts
+export const flag = true
+\`\`\`
+
+---
+
+### Risks
+
+Paragraph close to the table and hr with a link to [docs](https://example.com/docs).
+
+> Second quote block
+> with multiple lines
+> and a list:
+> - Q item 1
+> - Q item 2
+>   - Q nested 1
+>   - Q nested 2
+>
+> Final quoted line.
+
+Final paragraph with an image ![alt](https://example.com/img.png).`
+
+  const {
+    renderer: localRenderer,
+    renderOnce: localRenderOnce,
+    captureCharFrame,
+  } = await createTestRenderer({
+    width: 90,
+    height: 120,
+  })
+
+  try {
+    const md = new MarkdownRenderable(localRenderer, {
+      id: "markdown",
+      content: markdown,
+      syntaxStyle,
+    })
+
+    localRenderer.root.add(md)
+    await localRenderOnce()
+
+    const lines = captureCharFrame()
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .join("\n")
+      .trimEnd()
+
+    expect("\n" + lines).toMatchInlineSnapshot(`
+      "
+      Weekly Update
+
+      Quick summary for the team with bold, italic, code, and strikethrough.
+
+      People
+
+      - Alice
+        - Role: Tech Lead
+        - Profile: https://example.com/alice (https://example.com/alice)
+        - Notes: handoff doc (https://example.com/alice/handoff)
+      - Bob
+        - Role: Infra
+        - Profile: https://example.com/bob (https://example.com/bob)
+        - Notes: runbook (https://example.com/runbook)
+
+      > Status call highlights:
+      > - On-call load is high
+      >   - Add more automation
+      >   - Improve alert routing
+      > - Task list:
+      >   - [ ] Triage paging rules
+      >   - [x] Reduce noisy alerts
+      >
+      > 1. Investigate spikes
+      >   1. Check dashboard
+      >   2. Review traces
+      > 2. Apply fixes
+      >
+      > Final note with bold and code.
+
+      Metrics
+
+      Table below:
+
+      ┌──────────┬───────┐
+      │Metric    │Value  │
+      │──────────│───────│
+      │Coverage  │92%    │
+      │──────────│───────│
+      │Latency   │120ms  │
+      └──────────┴───────┘
+
+      Links right after table:
+
+      - Dashboard: https://example.com/metrics (https://example.com/metrics)
+      - Incident history: https://example.com/incidents (https://example.com/incidents)
+
+      export const flag = true
+
+      ---
+
+      Risks
+
+      Paragraph close to the table and hr with a link to docs (https://example.com/docs).
+
+      > Second quote block
+      > with multiple lines
+      > and a list:
+      > - Q item 1
+      > - Q item 2
+      >   - Q nested 1
+      >   - Q nested 2
+      >
+      > Final quoted line.
+
+      Final paragraph with an image alt."
+    `)
+  } finally {
+    localRenderer.destroy()
+  }
 })
 
 // Custom renderNode tests
@@ -1178,6 +1407,59 @@ test("streaming mode keeps trailing tokens unstable", async () => {
   expect(frame2).toContain("Hello World")
 })
 
+test("streaming task list keeps checkbox and text on same line", async () => {
+  const md = new MarkdownRenderable(renderer, {
+    id: "markdown",
+    content: "- [ ]",
+    syntaxStyle,
+    streaming: true,
+  })
+
+  renderer.root.add(md)
+  await renderOnce()
+
+  md.content = "- [ ] todo"
+  await renderOnce()
+
+  const frame = captureFrame()
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trimEnd()
+
+  expect("\n" + frame).toMatchInlineSnapshot(`
+    "
+    - [ ] todo"
+  `)
+})
+
+test("streaming blockquote keeps single prefix per line", async () => {
+  const md = new MarkdownRenderable(renderer, {
+    id: "markdown",
+    content: "> first line",
+    syntaxStyle,
+    streaming: true,
+  })
+
+  renderer.root.add(md)
+  await renderOnce()
+
+  md.content = "> first line\n> second line"
+  await renderOnce()
+
+  const frame = captureFrame()
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trimEnd()
+
+  expect("\n" + frame).toMatchInlineSnapshot(`
+    "
+    > first line
+    > second line"
+  `)
+})
+
 test("non-streaming mode parses all tokens as stable", async () => {
   const md = new MarkdownRenderable(renderer, {
     id: "markdown",
@@ -1522,6 +1804,34 @@ test("streaming table transitions cleanly from raw fallback to proper table", as
   expect(frame).not.toContain("| D")
 })
 
+test("streaming table renders with conceal=false when row is complete", async () => {
+  const md = new MarkdownRenderable(renderer, {
+    id: "markdown",
+    content: "| A | B |\n|---|---|\n| 1 | 2 |\n",
+    syntaxStyle,
+    conceal: false,
+    streaming: true,
+  })
+
+  renderer.root.add(md)
+  await renderOnce()
+
+  const frame = captureFrame()
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trimEnd()
+
+  expect("\n" + frame).toMatchInlineSnapshot(`
+    "
+    ┌───┬───┐
+    │A  │B  │
+    │───│───│
+    │1  │2  │
+    └───┴───┘"
+  `)
+})
+
 test("streaming table can transition back to raw fallback when rows are removed", async () => {
   const md = new MarkdownRenderable(renderer, {
     id: "markdown",
@@ -1706,7 +2016,6 @@ The table alignment uses:
   // Switch theme
   md.syntaxStyle = theme2
   await renderOnce()
-
   const frame2 = captureSpans()
   const headingSpan2 = findSpanContaining(frame2, "OpenTUI Markdown Demo")
   expect(headingSpan2).toBeDefined()
