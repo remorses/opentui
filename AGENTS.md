@@ -1,3 +1,10 @@
+this is an opentui fork. with opentui scope renamed to opentuah.
+
+to publish the packages use `bun scripts/publish-opentuah.ts`. the script automatically bumps packages.
+
+to add fixes to this opentui fork you should create separate branches and merge them here. never add commits here other than for chores for publishing the fork. fixes should live in their branches and then merged here. so they can be pushed as PRs
+
+
 # Agent Guidelines for opentui
 
 Default to using Bun instead of Node.js.
