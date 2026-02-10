@@ -9,7 +9,7 @@ import {
 } from "./LineNumberRenderable"
 import { RGBA, parseColor } from "../lib/RGBA"
 import { SyntaxStyle } from "../syntax-style"
-import { parsePatch, type StructuredPatch } from "diff"
+import { parsePatch, type StructuredPatch, type StructuredPatchHunk } from "diff"
 import { TextRenderable } from "./Text"
 import type { TreeSitterClient } from "../lib/tree-sitter"
 
@@ -89,13 +89,21 @@ export function computeInlineHighlights(
   return { oldHighlight, newHighlight }
 }
 
+interface HunkWithContext extends StructuredPatchHunk {
+  context?: string
+}
+
+interface ParsedDiff extends Omit<StructuredPatch, "hunks"> {
+  hunks: HunkWithContext[]
+}
+
 interface LogicalLine {
   content: string
   lineNum?: number
   hideLineNumber?: boolean
   color?: string | RGBA
   sign?: LineSign
-  type: "context" | "add" | "remove" | "empty"
+  type: "context" | "add" | "remove" | "empty" | "hunk-header"
   inlineHighlights?: InlineHighlight[]
 }
 
@@ -145,12 +153,15 @@ export interface DiffRenderableOptions extends RenderableOptions<DiffRenderable>
    * @default removedBg.brighten(1.15)
    */
   removedWordBg?: string | RGBA
+
+  hunkHeaderBg?: string | RGBA
+  hunkHeaderFg?: string | RGBA
 }
 
 export class DiffRenderable extends Renderable {
   private _diff: string
   private _view: "unified" | "split"
-  private _parsedDiff: StructuredPatch | null = null
+  private _parsedDiff: ParsedDiff | null = null
   private _parseError: Error | null = null
 
   // CodeRenderable options
@@ -182,6 +193,8 @@ export class DiffRenderable extends Renderable {
   private _disableWordHighlights: boolean
   private _addedWordBg: RGBA
   private _removedWordBg: RGBA
+  private _hunkHeaderBg: RGBA
+  private _hunkHeaderFg: RGBA
 
   private leftSide: LineNumberRenderable | null = null
   private rightSide: LineNumberRenderable | null = null
@@ -240,6 +253,8 @@ export class DiffRenderable extends Renderable {
     // Small brightness increase (~10-15%) similar to GitHub Desktop's light theme contrast
     this._addedWordBg = options.addedWordBg ? parseColor(options.addedWordBg) : this._addedBg.brighten(1.15)
     this._removedWordBg = options.removedWordBg ? parseColor(options.removedWordBg) : this._removedBg.brighten(1.15)
+    this._hunkHeaderBg = parseColor(options.hunkHeaderBg ?? "#1a1a2e")
+    this._hunkHeaderFg = parseColor(options.hunkHeaderFg ?? "#6688aa")
 
     if (this._diff) {
       this.parseDiff()
@@ -335,6 +350,8 @@ export class DiffRenderable extends Renderable {
     return { leftLines, rightLines }
   }
 
+  private static readonly HUNK_HEADER_RE = /^@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@(.*)/
+
   private parseDiff(): void {
     if (!this._diff) {
       this._parsedDiff = null
@@ -351,7 +368,22 @@ export class DiffRenderable extends Renderable {
         return
       }
 
-      this._parsedDiff = patches[0]
+      const patch = patches[0]
+
+      const contexts: string[] = []
+      for (const line of this._diff.split("\n")) {
+        const match = DiffRenderable.HUNK_HEADER_RE.exec(line)
+        if (match) {
+          contexts.push(match[1].trimStart())
+        }
+      }
+
+      const hunks: HunkWithContext[] = patch.hunks.map((hunk, i) => ({
+        ...hunk,
+        context: contexts[i] || undefined,
+      }))
+
+      this._parsedDiff = { ...patch, hunks }
       this._parseError = null
     } catch (error) {
       this._parsedDiff = null
@@ -653,10 +685,27 @@ export class DiffRenderable extends Renderable {
     const lineSigns = new Map<number, LineSign>()
     const lineNumbers = new Map<number, number>()
     const inlineHighlights = new Map<number, LineInlineHighlight[]>()
+    const hideLineNumbers = new Set<number>()
 
     let lineIndex = 0
 
     for (const hunk of this._parsedDiff.hunks) {
+      if (hunk.context) {
+        contentLines.push(hunk.context)
+        const config: LineColorConfig = {
+          gutter: this._lineNumberBg,
+        }
+        if (this._contextContentBg) {
+          config.content = this._contextContentBg
+        } else {
+          config.content = this._contextBg
+        }
+        lineColors.set(lineIndex, config)
+        lineSigns.set(lineIndex, { after: " @", afterColor: this._hunkHeaderFg })
+        hideLineNumbers.add(lineIndex)
+        lineIndex++
+      }
+
       let oldLineNum = hunk.oldStart
       let newLineNum = hunk.newStart
 
@@ -757,7 +806,7 @@ export class DiffRenderable extends Renderable {
       lineColors,
       lineSigns,
       lineNumbers,
-      new Set<number>(),
+      hideLineNumbers,
       "100%",
       inlineHighlights.size > 0 ? inlineHighlights : undefined,
     )
@@ -790,6 +839,21 @@ export class DiffRenderable extends Renderable {
     const rightLogicalLines: LogicalLine[] = []
 
     for (const hunk of this._parsedDiff.hunks) {
+      if (hunk.context) {
+        leftLogicalLines.push({
+          content: hunk.context,
+          hideLineNumber: true,
+          sign: { after: " @", afterColor: this._hunkHeaderFg },
+          type: "hunk-header",
+        })
+        rightLogicalLines.push({
+          content: hunk.context,
+          hideLineNumber: true,
+          sign: { after: " @", afterColor: this._hunkHeaderFg },
+          type: "hunk-header",
+        })
+      }
+
       let oldLineNum = hunk.oldStart
       let newLineNum = hunk.newStart
 
@@ -995,6 +1059,16 @@ export class DiffRenderable extends Renderable {
           config.content = this._contextBg
         }
         leftLineColors.set(index, config)
+      } else if (line.type === "hunk-header") {
+        const config: LineColorConfig = {
+          gutter: this._lineNumberBg,
+        }
+        if (this._contextContentBg) {
+          config.content = this._contextContentBg
+        } else {
+          config.content = this._contextBg
+        }
+        leftLineColors.set(index, config)
       }
       if (line.sign) {
         leftLineSigns.set(index, line.sign)
@@ -1022,6 +1096,16 @@ export class DiffRenderable extends Renderable {
         }
         rightLineColors.set(index, config)
       } else if (line.type === "context") {
+        const config: LineColorConfig = {
+          gutter: this._lineNumberBg,
+        }
+        if (this._contextContentBg) {
+          config.content = this._contextContentBg
+        } else {
+          config.content = this._contextBg
+        }
+        rightLineColors.set(index, config)
+      } else if (line.type === "hunk-header") {
         const config: LineColorConfig = {
           gutter: this._lineNumberBg,
         }
@@ -1227,6 +1311,30 @@ export class DiffRenderable extends Renderable {
     const parsed = parseColor(value)
     if (this._removedLineNumberBg !== parsed) {
       this._removedLineNumberBg = parsed
+      this.rebuildView()
+    }
+  }
+
+  public get hunkHeaderBg(): RGBA {
+    return this._hunkHeaderBg
+  }
+
+  public set hunkHeaderBg(value: string | RGBA) {
+    const parsed = parseColor(value)
+    if (this._hunkHeaderBg !== parsed) {
+      this._hunkHeaderBg = parsed
+      this.rebuildView()
+    }
+  }
+
+  public get hunkHeaderFg(): RGBA {
+    return this._hunkHeaderFg
+  }
+
+  public set hunkHeaderFg(value: string | RGBA) {
+    const parsed = parseColor(value)
+    if (this._hunkHeaderFg !== parsed) {
+      this._hunkHeaderFg = parsed
       this.rebuildView()
     }
   }
