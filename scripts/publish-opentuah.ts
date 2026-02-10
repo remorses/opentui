@@ -5,9 +5,13 @@
  * This script temporarily renames all @opentui packages to @opentuah,
  * publishes them to npm, and then restores the original state.
  *
+ * Instead of a hardcoded file list, it auto-discovers ALL files containing
+ * @opentui references using `git grep`, so new files are never missed.
+ *
  * Usage (from repo root):
  *   bun scripts/publish-opentuah.ts --dry-run  # Preview changes
  *   bun scripts/publish-opentuah.ts             # Actually publish
+ *   bun scripts/publish-opentuah.ts --bump      # Bump version first
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "fs"
@@ -24,25 +28,10 @@ const skipBuild = args.includes("--skip-build")
 const skipPublish = args.includes("--skip-publish")
 const bumpVersion = args.includes("--bump")
 
-// Files to modify (relative to ROOT_DIR)
-const FILES_TO_MODIFY = [
-  "package.json",
-  "packages/core/package.json",
-  "packages/react/package.json",
-  "packages/solid/package.json",
-  "packages/web/package.json",
-  "packages/core/scripts/build.ts",
-  "packages/react/scripts/build.ts",
-  "packages/solid/scripts/build.ts",
-  "packages/core/scripts/publish.ts",
-  "packages/react/scripts/publish.ts",
-  "packages/solid/scripts/publish.ts",
-  "packages/solid/scripts/solid-plugin.ts",
-  "packages/solid/bunfig.toml",
-  "packages/core/src/zig.ts",
-  "scripts/pre-publish.ts",
-  "scripts/prepare-release.ts",
-]
+// Directories to skip when discovering files (not relevant to build/publish)
+const SKIP_DIRS = ["node_modules", ".git", "dist", "opensrc", "packages/web/src/content"]
+// File patterns to skip
+const SKIP_PATTERNS = [/\.wasm$/, /bun\.lock$/, /publish-opentuah\.ts$/]
 
 // Store backups
 const backups = new Map<string, string>()
@@ -55,12 +44,41 @@ function logError(message: string) {
   console.error(`[opentuah] ERROR: ${message}`)
 }
 
+/**
+ * Auto-discover all files containing @opentui using git grep.
+ * This ensures we never miss a file, even if new ones are added later.
+ */
+function discoverFiles(): string[] {
+  const result = spawnSync("git", ["grep", "-l", OLD_SCOPE, "--", "."], {
+    cwd: ROOT_DIR,
+    encoding: "utf8",
+  })
+
+  if (result.status !== 0 && result.status !== 1) {
+    logError("git grep failed")
+    return []
+  }
+
+  const allFiles = (result.stdout || "").trim().split("\n").filter(Boolean)
+
+  return allFiles.filter((file) => {
+    // Skip excluded directories
+    for (const dir of SKIP_DIRS) {
+      if (file.startsWith(dir + "/") || file === dir) return false
+    }
+    // Skip excluded patterns
+    for (const pattern of SKIP_PATTERNS) {
+      if (pattern.test(file)) return false
+    }
+    return true
+  })
+}
+
 function backup(filePath: string): void {
   const fullPath = join(ROOT_DIR, filePath)
   if (existsSync(fullPath)) {
     const content = readFileSync(fullPath, "utf8")
     backups.set(filePath, content)
-    log(`Backed up: ${filePath}`)
   } else {
     logError(`File not found: ${filePath}`)
   }
@@ -71,12 +89,11 @@ function restore(filePath: string): void {
   if (content !== undefined) {
     const fullPath = join(ROOT_DIR, filePath)
     writeFileSync(fullPath, content)
-    log(`Restored: ${filePath}`)
   }
 }
 
 function restoreAll(): void {
-  log("Restoring all files...")
+  log(`Restoring ${backups.size} files...`)
   for (const filePath of backups.keys()) {
     restore(filePath)
   }
@@ -92,27 +109,26 @@ function restoreAll(): void {
   }
 }
 
+/**
+ * Replace all forms of @opentui with @opentuah in a file.
+ * Handles: package refs, standalone names, template literals, Symbol.for, etc.
+ */
+function replaceScope(content: string): string {
+  return content.replace(/@opentui(?=\/|["'\s`),;:]|$)/g, NEW_SCOPE)
+}
+
 function modifyFile(filePath: string): void {
-  const fullPath = join(ROOT_DIR, filePath)
   const original = backups.get(filePath)
   if (original === undefined) {
     logError(`No backup found for: ${filePath}`)
     return
   }
 
-  // Replace all forms of @opentui with @opentuah:
-  // - @opentui/ in any context (package refs, template literals, symbols)
-  // - "@opentui" and '@opentui' as standalone names
-  let modified = original
-    .replace(/@opentui\//g, `${NEW_SCOPE}/`)
-    .replace(/"@opentui"/g, `"${NEW_SCOPE}"`)
-    .replace(/'@opentui'/g, `'${NEW_SCOPE}'`)
+  const modified = replaceScope(original)
 
   if (isDryRun) {
-    // Show diff
     if (original !== modified) {
       log(`Would modify: ${filePath}`)
-      // Show a simple diff of changed lines
       const originalLines = original.split("\n")
       const modifiedLines = modified.split("\n")
       for (let i = 0; i < Math.max(originalLines.length, modifiedLines.length); i++) {
@@ -123,23 +139,29 @@ function modifyFile(filePath: string): void {
       }
     }
   } else {
+    const fullPath = join(ROOT_DIR, filePath)
     writeFileSync(fullPath, modified)
     log(`Modified: ${filePath}`)
   }
 }
 
+/**
+ * Recursively fix @opentui references in dist output files.
+ * The bundler uses packages: "external" so import strings are preserved
+ * verbatim and need post-build rewriting.
+ */
 function fixDistImports(dir: string): void {
   const entries = readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
     const fullPath = join(dir, entry.name)
     if (entry.isDirectory()) {
       fixDistImports(fullPath)
-    } else if (entry.name.endsWith(".js") || entry.name.endsWith(".ts") || entry.name.endsWith(".d.ts")) {
+    } else if (/\.(js|ts|d\.ts|json|md)$/.test(entry.name)) {
       const content = readFileSync(fullPath, "utf8")
       if (content.includes(OLD_SCOPE)) {
-        const fixed = content.replace(/@opentui\//g, `${NEW_SCOPE}/`).replace(/"@opentui"/g, `"${NEW_SCOPE}"`)
+        const fixed = replaceScope(content)
         writeFileSync(fullPath, fixed)
-        log(`Fixed dist imports: ${fullPath.replace(ROOT_DIR + "/", "")}`)
+        log(`Fixed dist: ${fullPath.replace(ROOT_DIR + "/", "")}`)
       }
     }
   }
@@ -165,11 +187,11 @@ function runCommand(command: string, args: string[], description: string): boole
 }
 
 async function main() {
-  log("=" .repeat(60))
+  log("=".repeat(60))
   log(`Publishing ${NEW_SCOPE} packages`)
   log(`Mode: ${isDryRun ? "DRY RUN" : "PRODUCTION"}`)
   log(`Working directory: ${ROOT_DIR}`)
-  log("=" .repeat(60))
+  log("=".repeat(60))
 
   // Verify we're in the right directory
   const rootPackageJsonPath = join(ROOT_DIR, "package.json")
@@ -193,20 +215,21 @@ async function main() {
       }
     }
 
-    // Phase 1: Backup
-    log("\n--- PHASE 1: BACKUP ---")
-    for (const file of FILES_TO_MODIFY) {
+    // Phase 1: Discover and backup
+    log("\n--- PHASE 1: DISCOVER & BACKUP ---")
+    const filesToModify = discoverFiles()
+    log(`Found ${filesToModify.length} files containing "${OLD_SCOPE}"`)
+    for (const file of filesToModify) {
       backup(file)
     }
 
     // Phase 2: Modify
     log("\n--- PHASE 2: MODIFY ---")
-    for (const file of FILES_TO_MODIFY) {
+    for (const file of filesToModify) {
       modifyFile(file)
     }
 
     if (!isDryRun) {
-      // Update lockfile with new package names
       if (!runCommand("bun", ["install"], "bun install (update lockfile)")) {
         throw new Error("Failed to update lockfile")
       }
@@ -236,10 +259,9 @@ async function main() {
       }
     }
 
-    // Phase 3.5: Fix import strings in bundled JS output
+    // Phase 3.5: Fix import strings in bundled output
     // The bundler uses packages: "external" so import strings like
     // `@opentui/core` are preserved verbatim in the output JS.
-    // We need to rewrite them in the dist directories.
     if (!isDryRun && !skipBuild) {
       log("\n--- PHASE 3.5: FIX DIST IMPORTS ---")
       const distDirs = ["packages/react/dist", "packages/solid/dist", "packages/core/dist"]
@@ -250,13 +272,31 @@ async function main() {
       }
     }
 
+    // Phase 3.6: Final verification - ensure no @opentui leaks in dist
+    if (!isDryRun && !skipBuild) {
+      log("\n--- PHASE 3.6: VERIFY NO LEAKS ---")
+      let leakCount = 0
+      for (const distDir of ["packages/core/dist", "packages/react/dist", "packages/solid/dist"]) {
+        const fullDistDir = join(ROOT_DIR, distDir)
+        if (!existsSync(fullDistDir)) continue
+        const leaks = findLeaks(fullDistDir)
+        for (const leak of leaks) {
+          logError(`Leaked @opentui ref in: ${leak}`)
+          leakCount++
+        }
+      }
+      if (leakCount > 0) {
+        throw new Error(`Found ${leakCount} leaked @opentui references in dist`)
+      }
+      log("No @opentui leaks found in dist directories")
+    }
+
     // Phase 4: Publish
     log("\n--- PHASE 4: PUBLISH ---")
     if (skipPublish) {
       log("Skipping publish (--skip-publish)")
     } else {
-      // Skip pre-publish (has interactive prompt that doesn't work in non-TTY)
-      // and run individual publish commands directly
+      // Run individual publish commands (skip pre-publish interactive prompt)
       if (!runCommand("bun", ["run", "publish:core"], "bun run publish:core")) {
         throw new Error("Publish core failed")
       }
@@ -282,6 +322,27 @@ async function main() {
       log("(dry-run) Would restore all files")
     }
   }
+}
+
+/**
+ * Recursively find files in a directory that still contain @opentui.
+ * Used for leak detection after dist fixup.
+ */
+function findLeaks(dir: string): string[] {
+  const leaks: string[] = []
+  const entries = readdirSync(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      leaks.push(...findLeaks(fullPath))
+    } else if (/\.(js|ts|d\.ts|json)$/.test(entry.name)) {
+      const content = readFileSync(fullPath, "utf8")
+      if (content.includes(OLD_SCOPE)) {
+        leaks.push(fullPath.replace(ROOT_DIR + "/", ""))
+      }
+    }
+  }
+  return leaks
 }
 
 main().catch((error) => {
