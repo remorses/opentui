@@ -10,7 +10,7 @@
  *   bun scripts/publish-opentuah.ts             # Actually publish
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, readdirSync } from "fs"
 import { join } from "path"
 import { spawnSync } from "child_process"
 
@@ -22,6 +22,7 @@ const args = process.argv.slice(2)
 const isDryRun = args.includes("--dry-run")
 const skipBuild = args.includes("--skip-build")
 const skipPublish = args.includes("--skip-publish")
+const bumpVersion = args.includes("--bump")
 
 // Files to modify (relative to ROOT_DIR)
 const FILES_TO_MODIFY = [
@@ -127,6 +128,23 @@ function modifyFile(filePath: string): void {
   }
 }
 
+function fixDistImports(dir: string): void {
+  const entries = readdirSync(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      fixDistImports(fullPath)
+    } else if (entry.name.endsWith(".js") || entry.name.endsWith(".ts") || entry.name.endsWith(".d.ts")) {
+      const content = readFileSync(fullPath, "utf8")
+      if (content.includes(OLD_SCOPE)) {
+        const fixed = content.replace(/@opentui\//g, `${NEW_SCOPE}/`).replace(/"@opentui"/g, `"${NEW_SCOPE}"`)
+        writeFileSync(fullPath, fixed)
+        log(`Fixed dist imports: ${fullPath.replace(ROOT_DIR + "/", "")}`)
+      }
+    }
+  }
+}
+
 function runCommand(command: string, args: string[], description: string): boolean {
   log(`Running: ${description}`)
   if (isDryRun) {
@@ -167,6 +185,14 @@ async function main() {
   }
 
   try {
+    // Phase 0: Bump version if requested
+    if (bumpVersion) {
+      log("\n--- PHASE 0: BUMP VERSION ---")
+      if (!runCommand("bun", ["scripts/prepare-release.ts", "*"], "bun scripts/prepare-release.ts *")) {
+        throw new Error("Version bump failed")
+      }
+    }
+
     // Phase 1: Backup
     log("\n--- PHASE 1: BACKUP ---")
     for (const file of FILES_TO_MODIFY) {
@@ -207,6 +233,20 @@ async function main() {
           logError(`dist/package.json has wrong name: "${distPkg.name}"`)
           throw new Error("Build produced wrong package name")
         }
+      }
+    }
+
+    // Phase 3.5: Fix import strings in bundled JS output
+    // The bundler uses packages: "external" so import strings like
+    // `@opentui/core` are preserved verbatim in the output JS.
+    // We need to rewrite them in the dist directories.
+    if (!isDryRun && !skipBuild) {
+      log("\n--- PHASE 3.5: FIX DIST IMPORTS ---")
+      const distDirs = ["packages/react/dist", "packages/solid/dist", "packages/core/dist"]
+      for (const distDir of distDirs) {
+        const fullDistDir = join(ROOT_DIR, distDir)
+        if (!existsSync(fullDistDir)) continue
+        fixDistImports(fullDistDir)
       }
     }
 
