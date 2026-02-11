@@ -13,13 +13,6 @@ import { parsePatch, type StructuredPatch, type StructuredPatchHunk } from "diff
 import { TextRenderable } from "./Text"
 import type { TreeSitterClient } from "../lib/tree-sitter"
 
-/** Represents a highlighted span within a line for word-level diff */
-interface InlineHighlight {
-  startCol: number
-  endCol: number
-  type: "added-word" | "removed-word"
-}
-
 /** Represents a range within a string */
 interface IRange {
   location: number
@@ -65,26 +58,27 @@ function toDisplayColumns(content: string, start: number, length: number): { sta
   return { startCol: start, endCol: start + length }
 }
 
+interface ColumnRange {
+  startCol: number
+  endCol: number
+}
+
 // Compute word-level highlights for a pair of changed lines
 export function computeInlineHighlights(
   oldContent: string,
   newContent: string,
-): { oldHighlight: InlineHighlight | null; newHighlight: InlineHighlight | null } {
+): { oldHighlight: ColumnRange | null; newHighlight: ColumnRange | null } {
   if (oldContent === newContent) {
     return { oldHighlight: null, newHighlight: null }
   }
 
   const { stringARange, stringBRange } = relativeChanges(oldContent, newContent)
 
-  const oldHighlight: InlineHighlight | null =
-    stringARange.length > 0
-      ? { ...toDisplayColumns(oldContent, stringARange.location, stringARange.length), type: "removed-word" }
-      : null
+  const oldHighlight: ColumnRange | null =
+    stringARange.length > 0 ? toDisplayColumns(oldContent, stringARange.location, stringARange.length) : null
 
-  const newHighlight: InlineHighlight | null =
-    stringBRange.length > 0
-      ? { ...toDisplayColumns(newContent, stringBRange.location, stringBRange.length), type: "added-word" }
-      : null
+  const newHighlight: ColumnRange | null =
+    stringBRange.length > 0 ? toDisplayColumns(newContent, stringBRange.location, stringBRange.length) : null
 
   return { oldHighlight, newHighlight }
 }
@@ -104,7 +98,7 @@ interface LogicalLine {
   color?: string | RGBA
   sign?: LineSign
   type: "context" | "add" | "remove" | "empty" | "hunk-header"
-  inlineHighlights?: InlineHighlight[]
+  inlineHighlights?: LineInlineHighlight[]
 }
 
 export interface DiffRenderableOptions extends RenderableOptions<DiffRenderable> {
@@ -145,12 +139,12 @@ export interface DiffRenderableOptions extends RenderableOptions<DiffRenderable>
   disableWordHighlights?: boolean
   /**
    * Background color for added words within modified lines.
-   * @default addedBg.brighten(1.15)
+   * @default addedBg.brighten(1.10)
    */
   addedWordBg?: string | RGBA
   /**
    * Background color for removed words within modified lines.
-   * @default removedBg.brighten(1.15)
+   * @default removedBg.brighten(1.10)
    */
   removedWordBg?: string | RGBA
 
@@ -250,9 +244,9 @@ export class DiffRenderable extends Renderable {
     this._addedLineNumberBg = parseColor(options.addedLineNumberBg ?? "transparent")
     this._removedLineNumberBg = parseColor(options.removedLineNumberBg ?? "transparent")
     this._disableWordHighlights = options.disableWordHighlights ?? false
-    // Small brightness increase (~10-15%) similar to GitHub Desktop's light theme contrast
-    this._addedWordBg = options.addedWordBg ? parseColor(options.addedWordBg) : this._addedBg.brighten(1.15)
-    this._removedWordBg = options.removedWordBg ? parseColor(options.removedWordBg) : this._removedBg.brighten(1.15)
+    // ~10% brightness increase for word-level highlight contrast
+    this._addedWordBg = options.addedWordBg ? parseColor(options.addedWordBg) : this._addedBg.brighten(1.1)
+    this._removedWordBg = options.removedWordBg ? parseColor(options.removedWordBg) : this._removedBg.brighten(1.1)
     this._hunkHeaderBg = parseColor(options.hunkHeaderBg ?? "#1a1a2e")
     this._hunkHeaderFg = parseColor(options.hunkHeaderFg ?? "#6688aa")
 
@@ -260,10 +254,6 @@ export class DiffRenderable extends Renderable {
       this.parseDiff()
       this.buildView()
     }
-  }
-
-  private toLineHighlights(highlights: InlineHighlight[], bg: RGBA): LineInlineHighlight[] {
-    return highlights.map((h) => ({ startCol: h.startCol, endCol: h.endCol, bg }))
   }
 
   private processChangeBlockWithHighlights(
@@ -279,9 +269,9 @@ export class DiffRenderable extends Renderable {
     // lines on hunks that have the same number of added and deleted lines.
     const shouldDisplayDiffInChunk = !this._disableWordHighlights && adds.length === removes.length
 
-    // Pre-compute diff tokens for paired lines (matching GitHub Desktop)
-    const diffTokensBefore: (InlineHighlight | null)[] = []
-    const diffTokensAfter: (InlineHighlight | null)[] = []
+    // Pre-compute highlights for paired lines (matching GitHub Desktop)
+    const removedHighlights: (ColumnRange | null)[] = []
+    const addedHighlights: (ColumnRange | null)[] = []
 
     if (shouldDisplayDiffInChunk) {
       for (let i = 0; i < removes.length; i++) {
@@ -290,11 +280,11 @@ export class DiffRenderable extends Renderable {
 
         if (remove.content.length < MaxIntraLineDiffStringLength && add.content.length < MaxIntraLineDiffStringLength) {
           const { oldHighlight, newHighlight } = computeInlineHighlights(remove.content, add.content)
-          diffTokensBefore[i] = oldHighlight
-          diffTokensAfter[i] = newHighlight
+          removedHighlights[i] = oldHighlight
+          addedHighlights[i] = newHighlight
         } else {
-          diffTokensBefore[i] = null
-          diffTokensAfter[i] = null
+          removedHighlights[i] = null
+          addedHighlights[i] = null
         }
       }
     }
@@ -303,8 +293,8 @@ export class DiffRenderable extends Renderable {
       const remove = j < removes.length ? removes[j] : null
       const add = j < adds.length ? adds[j] : null
 
-      const leftHighlight = shouldDisplayDiffInChunk && j < diffTokensBefore.length ? diffTokensBefore[j] : null
-      const rightHighlight = shouldDisplayDiffInChunk && j < diffTokensAfter.length ? diffTokensAfter[j] : null
+      const leftRange = shouldDisplayDiffInChunk && j < removedHighlights.length ? removedHighlights[j] : null
+      const rightRange = shouldDisplayDiffInChunk && j < addedHighlights.length ? addedHighlights[j] : null
 
       if (remove) {
         leftLines.push({
@@ -316,7 +306,7 @@ export class DiffRenderable extends Renderable {
             afterColor: this._removedSignColor,
           },
           type: "remove",
-          inlineHighlights: leftHighlight ? [leftHighlight] : [],
+          inlineHighlights: leftRange ? [{ ...leftRange, bg: this._removedWordBg }] : [],
         })
       } else {
         leftLines.push({
@@ -336,7 +326,7 @@ export class DiffRenderable extends Renderable {
             afterColor: this._addedSignColor,
           },
           type: "add",
-          inlineHighlights: rightHighlight ? [rightHighlight] : [],
+          inlineHighlights: rightRange ? [{ ...rightRange, bg: this._addedWordBg }] : [],
         })
       } else {
         rightLines.push({
@@ -772,7 +762,7 @@ export class DiffRenderable extends Renderable {
             lineSigns.set(lineIndex, { after: " -", afterColor: this._removedSignColor })
             if (line.lineNum !== undefined) lineNumbers.set(lineIndex, line.lineNum)
             if (line.inlineHighlights?.length) {
-              inlineHighlights.set(lineIndex, this.toLineHighlights(line.inlineHighlights, this._removedWordBg))
+              inlineHighlights.set(lineIndex, line.inlineHighlights)
             }
             lineIndex++
           }
@@ -787,7 +777,7 @@ export class DiffRenderable extends Renderable {
             lineSigns.set(lineIndex, { after: " +", afterColor: this._addedSignColor })
             if (line.lineNum !== undefined) lineNumbers.set(lineIndex, line.lineNum)
             if (line.inlineHighlights?.length) {
-              inlineHighlights.set(lineIndex, this.toLineHighlights(line.inlineHighlights, this._addedWordBg))
+              inlineHighlights.set(lineIndex, line.inlineHighlights)
             }
             lineIndex++
           }
@@ -1074,7 +1064,7 @@ export class DiffRenderable extends Renderable {
         leftLineSigns.set(index, line.sign)
       }
       if (line.inlineHighlights?.length) {
-        leftInlineHighlights.set(index, this.toLineHighlights(line.inlineHighlights, this._removedWordBg))
+        leftInlineHighlights.set(index, line.inlineHighlights)
       }
     })
 
@@ -1120,7 +1110,7 @@ export class DiffRenderable extends Renderable {
         rightLineSigns.set(index, line.sign)
       }
       if (line.inlineHighlights?.length) {
-        rightInlineHighlights.set(index, this.toLineHighlights(line.inlineHighlights, this._addedWordBg))
+        rightInlineHighlights.set(index, line.inlineHighlights)
       }
     })
 
