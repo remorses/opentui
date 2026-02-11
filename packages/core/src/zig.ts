@@ -22,8 +22,18 @@ import {
 import { isBunfsPath } from "./lib/bunfs"
 import { attributesWithLink } from "./utils"
 
-const module = await import(`@opentui/core-${process.platform}-${process.arch}/index.ts`)
-let targetLibPath = module.default
+let targetLibPath: string
+try {
+  const module = await import(`@opentui/core-${process.platform}-${process.arch}/index.ts`)
+  targetLibPath = module.default
+} catch {
+  if (process.platform === "linux") {
+    const module = await import(`@opentui/core-linux-musl-${process.arch}/index.ts`)
+    targetLibPath = module.default
+  } else {
+    throw new Error(`opentui is not supported on the current platform: ${process.platform}-${process.arch}`)
+  }
+}
 
 if (isBunfsPath(targetLibPath)) {
   targetLibPath = targetLibPath.replace("../", "")
