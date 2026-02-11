@@ -6,8 +6,30 @@ import {
   SelectRenderableEvents,
   TabSelectRenderable,
   TabSelectRenderableEvents,
+  TextareaRenderable,
 } from "@opentui/core"
 import type { Instance, Props, Type } from "../types/host"
+
+const textareaInputListeners = new WeakMap<TextareaRenderable, () => void>()
+
+function setTextareaInputListener(instance: TextareaRenderable, listener: ((value: string) => void) | null) {
+  const prevListener = textareaInputListeners.get(instance)
+  if (prevListener) {
+    instance.editBuffer.off("content-changed", prevListener)
+    textareaInputListeners.delete(instance)
+  }
+
+  if (!listener) {
+    return
+  }
+
+  const inputListener = () => {
+    listener(instance.plainText)
+  }
+
+  textareaInputListeners.set(instance, inputListener)
+  instance.editBuffer.on("content-changed", inputListener)
+}
 
 function initEventListeners(instance: Instance, eventName: string, listener: any, previousListener?: any) {
   if (previousListener) {
@@ -59,6 +81,8 @@ function setProperty(instance: Instance, type: Type, propKey: string, propValue:
     case "onInput":
       if (instance instanceof InputRenderable) {
         initEventListeners(instance, InputRenderableEvents.INPUT, propValue, oldPropValue)
+      } else if (instance instanceof TextareaRenderable) {
+        setTextareaInputListener(instance, propValue)
       }
       break
     case "onSubmit":
