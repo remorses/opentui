@@ -21,6 +21,8 @@ import type {
   SelectOption,
   SelectRenderable,
   SelectRenderableOptions,
+  StatelessTerminalOptions,
+  StatelessTerminalRenderable,
   TabSelectOption,
   TabSelectRenderable,
   TabSelectRenderableOptions,
@@ -152,6 +154,8 @@ export type CodeProps = ComponentProps<CodeOptions, CodeRenderable>
 export type MarkdownProps = ComponentProps<MarkdownOptions, MarkdownRenderable>
 
 export type DiffProps = ComponentProps<DiffRenderableOptions, DiffRenderable>
+
+export type StatelessTerminalProps = ComponentProps<StatelessTerminalOptions, StatelessTerminalRenderable>
 
 export type SelectProps = ComponentProps<SelectRenderableOptions, SelectRenderable> & {
   focused?: boolean

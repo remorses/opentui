@@ -8,6 +8,7 @@ import {
   MarkdownRenderable,
   ScrollBoxRenderable,
   SelectRenderable,
+  StatelessTerminalRenderable,
   TabSelectRenderable,
   TextareaRenderable,
   TextAttributes,
@@ -103,6 +104,7 @@ export const baseComponents = {
   code: CodeRenderable,
   diff: DiffRenderable,
   line_number: LineNumberRenderable,
+  stateless_terminal: StatelessTerminalRenderable,
   markdown: MarkdownRenderable,
 
   span: SpanRenderable,

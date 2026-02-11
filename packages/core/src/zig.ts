@@ -22,7 +22,12 @@ import {
 import { isBunfsPath } from "./lib/bunfs"
 import { attributesWithLink } from "./utils"
 
-const module = await import(`@opentui/core-${process.platform}-${process.arch}/index.ts`)
+// Detect musl vs glibc on Linux by checking for musl dynamic linker
+const isMusl =
+  process.platform === "linux" && (existsSync("/lib/ld-musl-x86_64.so.1") || existsSync("/lib/ld-musl-aarch64.so.1"))
+const platformName = isMusl ? "linux-musl" : process.platform
+
+const module = await import(`@opentui/core-${platformName}-${process.arch}/index.ts`)
 let targetLibPath = module.default
 
 if (isBunfsPath(targetLibPath)) {
@@ -30,7 +35,7 @@ if (isBunfsPath(targetLibPath)) {
 }
 
 if (!existsSync(targetLibPath)) {
-  throw new Error(`opentui is not supported on the current platform: ${process.platform}-${process.arch}`)
+  throw new Error(`opentui is not supported on the current platform: ${platformName}-${process.arch}`)
 }
 
 registerEnvVar({
@@ -1017,6 +1022,25 @@ function getOpenTUILib(libPath?: string) {
       args: ["ptr", "u32", "u32", "u32", "ptr", "ptr", "u32"],
       returns: "void",
     },
+
+    // VTerm functions - use caller-provides-buffer pattern like rest of codebase
+    vtermPtyToJson: {
+      args: [
+        "ptr",
+        "usize" as const,
+        "u16",
+        "u16",
+        "usize" as const,
+        "usize" as const,
+        "ptr",
+        "usize" as const,
+      ] as const,
+      returns: "usize" as const,
+    },
+    vtermPtyToText: {
+      args: ["ptr", "usize" as const, "u16", "u16", "ptr", "usize" as const] as const,
+      returns: "usize" as const,
+    },
   })
 
   if (env.OTUI_DEBUG_FFI || env.OTUI_TRACE_FFI) {
@@ -1695,6 +1719,13 @@ export interface RenderLib {
   onceNativeEvent: (name: string, handler: (data: ArrayBuffer) => void) => void
   offNativeEvent: (name: string, handler: (data: ArrayBuffer) => void) => void
   onAnyNativeEvent: (handler: (name: string, data: ArrayBuffer) => void) => void
+
+  // VTerm functions
+  vtermPtyToJson: (
+    input: Buffer | Uint8Array | string,
+    options?: { cols?: number; rows?: number; offset?: number; limit?: number },
+  ) => any
+  vtermPtyToText: (input: Buffer | Uint8Array | string, options?: { cols?: number; rows?: number }) => string
 }
 
 class FFIRenderLib implements RenderLib {
@@ -3512,6 +3543,117 @@ class FFIRenderLib implements RenderLib {
 
   public onAnyNativeEvent(handler: (name: string, data: ArrayBuffer) => void): void {
     this._anyEventHandlers.push(handler)
+  }
+
+  // VTerm methods - use caller-provides-buffer pattern like rest of codebase
+
+  // Reusable buffer for vterm output (avoids 4MB allocation per call)
+  private vtermBuffer: Uint8Array | null = null
+  private readonly vtermBufferSize = 4 * 1024 * 1024
+
+  private getVtermBuffer(): Uint8Array {
+    if (!this.vtermBuffer) {
+      this.vtermBuffer = new Uint8Array(this.vtermBufferSize)
+    }
+    return this.vtermBuffer
+  }
+
+  public vtermPtyToJson(
+    input: Buffer | Uint8Array | string,
+    options: { cols?: number; rows?: number; offset?: number; limit?: number } = {},
+  ): any {
+    const { cols = 120, rows = 40, offset = 0, limit = 0 } = options
+
+    const inputStr = typeof input === "string" ? input : input.toString("utf-8")
+
+    if (inputStr.length === 0) {
+      return {
+        cols,
+        rows,
+        cursor: [0, 0],
+        offset,
+        totalLines: 0,
+        lines: [],
+      }
+    }
+
+    const inputBuffer = Buffer.from(inputStr)
+    const outBuffer = this.getVtermBuffer()
+
+    const actualLen = this.opentui.symbols.vtermPtyToJson(
+      ptr(inputBuffer),
+      inputBuffer.length,
+      cols,
+      rows,
+      offset,
+      limit,
+      ptr(outBuffer),
+      outBuffer.length,
+    )
+
+    const len = typeof actualLen === "bigint" ? Number(actualLen) : actualLen
+    if (len === 0) {
+      throw new Error(
+        "VTerm ptyToJson returned 0: either the FFI call failed to initialize/process, or the output exceeded the buffer size and was truncated",
+      )
+    }
+
+    const jsonStr = this.decoder.decode(outBuffer.subarray(0, len))
+
+    const raw = JSON.parse(jsonStr) as {
+      cols: number
+      rows: number
+      cursor: [number, number]
+      offset: number
+      totalLines: number
+      lines: Array<Array<[string, string | null, string | null, number, number]>>
+    }
+
+    return {
+      cols: raw.cols,
+      rows: raw.rows,
+      cursor: raw.cursor,
+      offset: raw.offset,
+      totalLines: raw.totalLines,
+      lines: raw.lines.map((line) => ({
+        spans: line.map(([text, fg, bg, flags, width]) => ({
+          text,
+          fg,
+          bg,
+          flags,
+          width,
+        })),
+      })),
+    }
+  }
+
+  public vtermPtyToText(input: Buffer | Uint8Array | string, options: { cols?: number; rows?: number } = {}): string {
+    const { cols = 500, rows = 256 } = options
+
+    const inputStr = typeof input === "string" ? input : input.toString("utf-8")
+
+    if (inputStr.length === 0) {
+      return ""
+    }
+
+    const inputBuffer = Buffer.from(inputStr)
+    const outBuffer = this.getVtermBuffer()
+
+    const actualLen = this.opentui.symbols.vtermPtyToText(
+      ptr(inputBuffer),
+      inputBuffer.length,
+      cols,
+      rows,
+      ptr(outBuffer),
+      outBuffer.length,
+    )
+
+    const len = typeof actualLen === "bigint" ? Number(actualLen) : actualLen
+    if (len === 0) {
+      return ""
+    }
+
+    return this.decoder.decode(outBuffer.subarray(0, len))
   }
 }
 
