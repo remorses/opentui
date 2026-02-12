@@ -229,11 +229,10 @@ async function main() {
       modifyFile(file)
     }
 
-    if (!isDryRun) {
-      if (!runCommand("bun", ["install"], "bun install (update lockfile)")) {
-        throw new Error("Failed to update lockfile")
-      }
-    }
+    // NOTE: We intentionally do NOT run `bun install` here.
+    // Running it would download old @opentuah packages from npm,
+    // overwriting the fresh binaries that build:native creates.
+    // The lockfile update is unnecessary since we restore everything at the end.
 
     // Phase 3: Build
     log("\n--- PHASE 3: BUILD ---")
