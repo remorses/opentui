@@ -1,4 +1,8 @@
-import type { TextRenderable } from "./Text"
+// NOTE: We intentionally avoid importing TextRenderable here to prevent circular dependency.
+// TextNode.ts and Text.ts have a circular relationship - Text imports TextNodeRenderable,
+// and TextNodeRenderable's textParent would import Text. Some bundlers (webpack, vite, esbuild)
+// don't handle `import type` correctly when rebundling, causing "Cannot access before initialization" errors.
+// Since textParent is only stored but never read, we use a generic type.
 import { BaseRenderable, type BaseRenderableOptions } from "../Renderable"
 import { RGBA, parseColor } from "../lib/RGBA"
 import { isStyledText, StyledText } from "../lib/styled-text"
@@ -307,12 +311,12 @@ export class TextNodeRenderable extends BaseRenderable {
 }
 
 export class RootTextNodeRenderable extends TextNodeRenderable {
-  textParent: TextRenderable
+  textParent: unknown
 
   constructor(
     private readonly ctx: RenderContext,
     options: TextNodeOptions,
-    textParent: TextRenderable,
+    textParent: unknown,
   ) {
     super(options)
     this.textParent = textParent
