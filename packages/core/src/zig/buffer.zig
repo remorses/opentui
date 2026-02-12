@@ -453,18 +453,21 @@ pub const OptimizedBuffer = struct {
 
             const span_start = index - @min(left, index - row_start);
             const span_end = index + @min(right, row_end - index);
-            const span_len = span_end - span_start + 1;
 
             var span_i: u32 = span_start;
-            while (span_i < span_start + span_len) : (span_i += 1) {
+            while (span_i <= span_end) : (span_i += 1) {
+                const span_char = self.buffer.char[span_i];
+                if (!(gp.isGraphemeChar(span_char) or gp.isContinuationChar(span_char))) continue;
+                if (gp.graphemeIdFromChar(span_char) != id) continue;
+
                 const span_link_id = ansi.TextAttributes.getLinkId(self.buffer.attributes[span_i]);
                 if (span_link_id != 0) {
                     self.link_tracker.removeCellRef(span_link_id);
                 }
-            }
 
-            @memset(self.buffer.char[span_start .. span_start + span_len], @intCast(DEFAULT_SPACE_CHAR));
-            @memset(self.buffer.attributes[span_start .. span_start + span_len], 0);
+                self.buffer.char[span_i] = @intCast(DEFAULT_SPACE_CHAR);
+                self.buffer.attributes[span_i] = 0;
+            }
         }
 
         if (gp.isGraphemeChar(cell.char)) {
