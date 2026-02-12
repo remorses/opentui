@@ -167,7 +167,7 @@ function fixDistImports(dir: string): void {
   }
 }
 
-function runCommand(command: string, args: string[], description: string): boolean {
+function runCommand(command: string, args: string[], description: string, cwd: string = ROOT_DIR): boolean {
   log(`Running: ${description}`)
   if (isDryRun) {
     log(`  (dry-run) Would run: ${command} ${args.join(" ")}`)
@@ -175,7 +175,7 @@ function runCommand(command: string, args: string[], description: string): boole
   }
 
   const result = spawnSync(command, args, {
-    cwd: ROOT_DIR,
+    cwd,
     stdio: "inherit",
   })
 
@@ -240,8 +240,33 @@ async function main() {
     if (skipBuild) {
       log("Skipping build (--skip-build)")
     } else {
-      if (!runCommand("bun", ["run", "build"], "bun run build")) {
-        throw new Error("Build failed")
+      // IMPORTANT: Always build native binaries for ALL platforms before publishing
+      // to ensure symbols like createNativeSpanFeed are present in all platform builds.
+      // Without --all, only the current platform is built which causes missing symbol
+      // errors for consumers on other platforms.
+      log("Building native binaries for all platforms...")
+      if (
+        !runCommand(
+          "bun",
+          ["run", "build:native", "--", "--all"],
+          "bun run build:native -- --all (cross-compile all platforms)",
+          join(ROOT_DIR, "packages/core")
+        )
+      ) {
+        throw new Error("Native build failed")
+      }
+
+      log("Building library...")
+      if (!runCommand("bun", ["run", "build:lib"], "bun run build:lib", join(ROOT_DIR, "packages/core"))) {
+        throw new Error("Library build failed")
+      }
+
+      // Build react and solid packages
+      if (!runCommand("bun", ["run", "build"], "bun run build (react)", join(ROOT_DIR, "packages/react"))) {
+        throw new Error("React build failed")
+      }
+      if (!runCommand("bun", ["run", "build"], "bun run build (solid)", join(ROOT_DIR, "packages/solid"))) {
+        throw new Error("Solid build failed")
       }
     }
 
