@@ -8,6 +8,7 @@ import path from "path"
 interface Variant {
   platform: string
   arch: string
+  libc?: "glibc" | "musl"
 }
 
 interface PackageJson {
@@ -40,15 +41,15 @@ const args = process.argv.slice(2)
 const buildLib = args.find((arg) => arg === "--lib")
 const buildNative = args.find((arg) => arg === "--native")
 const isDev = args.includes("--dev")
-const buildAll = args.includes("--all") // Build for all platforms (requires macOS or cross-compilation setup)
+const buildAll = args.includes("--all") // Build for all platforms
 
 const variants: Variant[] = [
   { platform: "darwin", arch: "x64" },
   { platform: "darwin", arch: "arm64" },
-  { platform: "linux", arch: "x64" },
-  { platform: "linux", arch: "arm64" },
-  { platform: "linux-musl", arch: "x64" },
-  { platform: "linux-musl", arch: "arm64" },
+  { platform: "linux", arch: "x64", libc: "glibc" },
+  { platform: "linux", arch: "arm64", libc: "glibc" },
+  { platform: "linux", arch: "x64", libc: "musl" },
+  { platform: "linux", arch: "arm64", libc: "musl" },
   { platform: "win32", arch: "x64" },
   { platform: "win32", arch: "arm64" },
 ]
@@ -58,15 +59,13 @@ if (!buildLib && !buildNative) {
   process.exit(1)
 }
 
-const getZigTarget = (platform: string, arch: string): string => {
-  const platformMap: Record<string, string> = {
-    darwin: "macos",
-    win32: "windows",
-    linux: "linux",
-    "linux-musl": "linux-musl",
-  }
+const getZigTarget = (platform: string, arch: string, libc?: "glibc" | "musl"): string => {
+  const platformMap: Record<string, string> = { darwin: "macos", win32: "windows", linux: "linux" }
   const archMap: Record<string, string> = { x64: "x86_64", arm64: "aarch64" }
-  return `${archMap[arch] ?? arch}-${platformMap[platform] ?? platform}`
+  const base = `${archMap[arch] ?? arch}-${platformMap[platform] ?? platform}`
+  // musl appends -musl, glibc uses plain dir name (matches build.zig output_name)
+  if (platform === "linux" && libc === "musl") return `${base}-musl`
+  return base
 }
 
 const replaceLinks = (text: string): string => {
@@ -108,10 +107,12 @@ if (buildNative) {
     process.exit(1)
   }
 
-  for (const { platform, arch } of variants) {
-    const nativeName = `${packageJson.name}-${platform}-${arch}`
+  for (const { platform, arch, libc } of variants) {
+    // musl gets -musl suffix, glibc has no suffix (e.g. core-linux-x64, core-linux-x64-musl)
+    const libcSuffix = libc === "musl" ? "-musl" : ""
+    const nativeName = `${packageJson.name}-${platform}-${arch}${libcSuffix}`
     const nativeDir = join(rootDir, "node_modules", nativeName)
-    const libDir = join(rootDir, "src", "zig", "lib", getZigTarget(platform, arch))
+    const libDir = join(rootDir, "src", "zig", "lib", getZigTarget(platform, arch, libc))
 
     rmSync(nativeDir, { recursive: true, force: true })
     mkdirSync(nativeDir, { recursive: true })
@@ -133,76 +134,37 @@ if (buildNative) {
     }
 
     if (copiedFiles === 0) {
-      // Skip platforms that weren't built (e.g., macOS when cross-compiling from Linux)
-      console.log(`Skipping ${platform}-${arch}: no libraries found (cross-compilation may not be supported)`)
+      // Skip platforms that weren't built
+      console.log(`Skipping ${platform}-${arch}: no libraries found`)
       rmSync(nativeDir, { recursive: true, force: true })
       continue
     }
 
-    // On Linux, ship both glibc and musl builds inside the *linux* native package.
-    // This keeps the TS loader (zig.ts) simple and allows the package's index.ts
-    // to pick the right .so at runtime.
-    let muslLibraryFileName: string | null = null
-    if (platform === "linux" && libraryFileName) {
-      const ext = path.extname(libraryFileName)
-      const base = libraryFileName.slice(0, -ext.length)
-      const muslDestFileName = `${base}.musl${ext}`
-
-      const muslLibDir = join(rootDir, "src", "zig", "lib", getZigTarget("linux-musl", arch))
-      const muslSrc = join(muslLibDir, libraryFileName)
-      if (existsSync(muslSrc)) {
-        copyFileSync(muslSrc, join(nativeDir, muslDestFileName))
-        muslLibraryFileName = muslDestFileName
-      }
-    }
-
-    const indexTsContent =
-      platform === "linux" && libraryFileName && muslLibraryFileName
-        ? `import { existsSync } from "fs"
-
-const glibcModule = await import("./${libraryFileName}", { with: { type: "file" } })
-let path = glibcModule.default
-
-const isMusl = existsSync("/lib/ld-musl-x86_64.so.1") || existsSync("/lib/ld-musl-aarch64.so.1")
-if (isMusl) {
-  try {
-    const muslModule = await import("./${muslLibraryFileName}", { with: { type: "file" } })
-    path = muslModule.default
-  } catch {
-    // ignore
-  }
-}
-
-export default path
-`
-        : `const module = await import("./${libraryFileName}", { with: { type: "file" } })
+    const indexTsContent = `const module = await import("./${libraryFileName}", { with: { type: "file" } })
 const path = module.default
-export default path
+export default path;
 `
     writeFileSync(join(nativeDir, "index.ts"), indexTsContent)
 
-    writeFileSync(
-      join(nativeDir, "package.json"),
-      JSON.stringify(
-        {
-          name: nativeName,
-          version: packageJson.version,
-          description: `Prebuilt ${platform}-${arch} binaries for ${packageJson.name}`,
-          main: "index.ts",
-          types: "index.ts",
-          license: packageJson.license,
-          author: packageJson.author,
-          homepage: packageJson.homepage,
-          repository: packageJson.repository,
-          bugs: packageJson.bugs,
-          keywords: [...(packageJson.keywords ?? []), "prebuild", "prebuilt"],
-          os: [platform],
-          cpu: [arch],
-        },
-        null,
-        2,
-      ),
-    )
+    const nativePackageJson: Record<string, any> = {
+      name: nativeName,
+      version: packageJson.version,
+      description: `Prebuilt ${platform}-${arch}${libcSuffix} binaries for ${packageJson.name}`,
+      main: "index.ts",
+      types: "index.ts",
+      license: packageJson.license,
+      author: packageJson.author,
+      homepage: packageJson.homepage,
+      repository: packageJson.repository,
+      bugs: packageJson.bugs,
+      keywords: [...(packageJson.keywords ?? []), "prebuild", "prebuilt"],
+      os: [platform],
+      cpu: [arch],
+    }
+    if (platform === "linux" && libc) {
+      nativePackageJson.libc = [libc]
+    }
+    writeFileSync(join(nativeDir, "package.json"), JSON.stringify(nativePackageJson, null, 2))
 
     writeFileSync(
       join(nativeDir, "README.md"),
@@ -221,6 +183,11 @@ if (buildLib) {
   rmSync(distDir, { recursive: true, force: true })
   mkdirSync(distDir, { recursive: true })
 
+  const externalDeps: string[] = [
+    ...Object.keys(packageJson.optionalDependencies || {}),
+    ...Object.keys(packageJson.peerDependencies || {}),
+  ]
+
   // Build main entry point
   if (!packageJson.module) {
     console.error("Error: 'module' field not found in package.json")
@@ -229,9 +196,11 @@ if (buildLib) {
 
   const entryPoints: string[] = [packageJson.module, "src/3d.ts", "src/testing.ts"]
 
+  // Build main entry points with code splitting
   // External patterns to prevent bundling tree-sitter assets and default-parsers
   // to allow standalone executables to work
   const externalPatterns = [
+    ...externalDeps,
     "*.wasm",
     "*.scm",
     "./lib/tree-sitter/assets/*",
@@ -239,8 +208,6 @@ if (buildLib) {
     "./lib/tree-sitter/default-parsers.ts",
   ]
 
-  // Build main entry points with code splitting
-  // Use --packages=external to externalize all dependencies
   spawnSync(
     "bun",
     [
@@ -249,7 +216,6 @@ if (buildLib) {
       "--splitting",
       "--outdir=dist",
       "--sourcemap",
-      "--packages=external",
       ...externalPatterns.flatMap((dep) => ["--external", dep]),
       ...entryPoints,
     ],
@@ -260,7 +226,7 @@ if (buildLib) {
   )
 
   // Build parser worker as standalone bundle (no splitting) so it can be loaded as a Worker
-  // Use --packages=external to externalize all dependencies
+  // Make web-tree-sitter external so it loads from node_modules with its WASM file
   spawnSync(
     "bun",
     [
@@ -268,7 +234,9 @@ if (buildLib) {
       "--target=bun",
       "--outdir=dist",
       "--sourcemap",
-      "--packages=external",
+      ...externalDeps.flatMap((dep) => ["--external", dep]),
+      "--external",
+      "web-tree-sitter",
       "src/lib/tree-sitter/parser.worker.ts",
     ],
     {
@@ -369,7 +337,10 @@ if (buildLib) {
   }
 
   const optionalDeps: Record<string, string> = Object.fromEntries(
-    variants.map(({ platform, arch }) => [`${packageJson.name}-${platform}-${arch}`, packageJson.version]),
+    variants.map(({ platform, arch, libc }) => {
+      const libcSuffix = libc === "musl" ? "-musl" : ""
+      return [`${packageJson.name}-${platform}-${arch}${libcSuffix}`, packageJson.version]
+    }),
   )
 
   writeFileSync(
