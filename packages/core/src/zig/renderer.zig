@@ -127,6 +127,7 @@ pub const CliRenderer = struct {
     lastCursorStyleTag: ?u8 = null,
     lastCursorBlinking: ?bool = null,
     lastCursorColorRGB: ?[3]u8 = null,
+    lastMousePointerStyle: Terminal.MousePointerStyle = .default,
 
     // Preallocated output buffer
     var outputBuffer: [OUTPUT_BUFFER_SIZE]u8 = undefined;
@@ -281,6 +282,7 @@ pub const CliRenderer = struct {
         }
 
         self.performShutdownSequence();
+        self.terminal.deinit();
 
         self.currentRenderBuffer.deinit();
         self.nextRenderBuffer.deinit();
@@ -809,6 +811,12 @@ pub const CliRenderer = struct {
             self.lastCursorColorRGB = null;
         }
 
+        const mousePointer = self.terminal.getMousePointer();
+        if (mousePointer != self.lastMousePointerStyle) {
+            ansi.ANSI.setMousePointerOutput(writer, mousePointer.toName()) catch {};
+            self.lastMousePointerStyle = mousePointer;
+        }
+        
         writer.writeAll(ansi.ANSI.syncReset) catch {};
 
         const renderEndTime = std.time.microTimestamp();
@@ -1206,6 +1214,11 @@ pub const CliRenderer = struct {
         return self.terminal.getCapabilities();
     }
 
+    pub fn setTerminalEnvVar(self: *CliRenderer, key: []const u8, value: []const u8) bool {
+        self.terminal.setHostEnvVar(self.allocator, key, value) catch return false;
+        return true;
+    }
+
     pub fn processCapabilityResponse(self: *CliRenderer, response: []const u8) void {
         self.terminal.processCapabilityResponse(response);
         var stream = std.io.fixedBufferStream(&self.writeOutBuf);
@@ -1216,18 +1229,6 @@ pub const CliRenderer = struct {
         const useKitty = self.terminal.opts.kitty_keyboard_flags > 0;
         self.terminal.enableDetectedFeatures(stream.writer(), useKitty) catch {};
         self.writeOut(stream.getWritten());
-    }
-
-    pub fn setCursorPosition(self: *CliRenderer, x: u32, y: u32, visible: bool) void {
-        self.terminal.setCursorPosition(x, y, visible);
-    }
-
-    pub fn setCursorStyle(self: *CliRenderer, style: Terminal.CursorStyle, blinking: bool) void {
-        self.terminal.setCursorStyle(style, blinking);
-    }
-
-    pub fn setCursorColor(self: *CliRenderer, color: [4]f32) void {
-        self.terminal.setCursorColor(color);
     }
 
     pub fn setKittyKeyboardFlags(self: *CliRenderer, flags: u8) void {

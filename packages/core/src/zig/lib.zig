@@ -92,6 +92,12 @@ export fn createRenderer(width: u32, height: u32, testing: bool, remote: bool) ?
     };
 }
 
+export fn setTerminalEnvVar(rendererPtr: *renderer.CliRenderer, keyPtr: [*]const u8, keyLen: usize, valuePtr: [*]const u8, valueLen: usize) bool {
+    const key = keyPtr[0..keyLen];
+    const value = valuePtr[0..valueLen];
+    return rendererPtr.setTerminalEnvVar(key, value);
+}
+
 export fn setUseThread(rendererPtr: *renderer.CliRenderer, useThread: bool) void {
     rendererPtr.setUseThread(useThread);
 }
@@ -255,14 +261,32 @@ export fn processCapabilityResponse(rendererPtr: *renderer.CliRenderer, response
     rendererPtr.processCapabilityResponse(response);
 }
 
-export fn setCursorStyle(rendererPtr: *renderer.CliRenderer, stylePtr: [*]const u8, styleLen: usize, blinking: bool) void {
-    const style = stylePtr[0..styleLen];
-    const cursorStyle = std.meta.stringToEnum(terminal.CursorStyle, style) orelse .block;
-    rendererPtr.terminal.setCursorStyle(cursorStyle, blinking);
-}
-
 export fn setCursorColor(rendererPtr: *renderer.CliRenderer, color: [*]const f32) void {
     rendererPtr.terminal.setCursorColor(utils.f32PtrToRGBA(color));
+}
+
+pub const CursorStyleOptions = extern struct {
+    style: u8,
+    blinking: u8,
+    color: ?[*]const f32,
+    cursor: u8,
+};
+
+export fn setCursorStyleOptions(rendererPtr: *renderer.CliRenderer, options: *const CursorStyleOptions) void {
+    const current = rendererPtr.terminal.getCursorStyle();
+
+    const style = if (options.style <= 2) @as(terminal.CursorStyle, @enumFromInt(options.style)) else current.style;
+    const blinking = if (options.blinking <= 1) options.blinking == 1 else current.blinking;
+
+    if (options.style <= 2 or options.blinking <= 1) {
+        rendererPtr.terminal.setCursorStyle(style, blinking);
+    }
+    if (options.color) |rgba| {
+        rendererPtr.terminal.setCursorColor(utils.f32PtrToRGBA(rgba));
+    }
+    if (options.cursor <= 5) {
+        rendererPtr.terminal.setMousePointerStyle(@enumFromInt(options.cursor));
+    }
 }
 
 pub const ExternalCursorState = extern struct {
@@ -475,6 +499,35 @@ export fn attributesWithLink(baseAttributes: u32, linkId: u32) u32 {
 
 export fn attributesGetLinkId(attributes: u32) u32 {
     return ansi.TextAttributes.getLinkId(attributes);
+}
+
+pub const ExternalGridDrawOptions = extern struct {
+    draw_inner: bool,
+    draw_outer: bool,
+};
+
+export fn bufferDrawGrid(
+    bufferPtr: *buffer.OptimizedBuffer,
+    borderChars: [*]const u32,
+    borderFg: [*]const f32,
+    borderBg: [*]const f32,
+    columnOffsets: [*]const i32,
+    columnCount: u32,
+    rowOffsets: [*]const i32,
+    rowCount: u32,
+    options: *const ExternalGridDrawOptions,
+) void {
+    bufferPtr.drawGrid(
+        borderChars,
+        utils.f32PtrToRGBA(borderFg),
+        utils.f32PtrToRGBA(borderBg),
+        columnOffsets,
+        columnCount,
+        rowOffsets,
+        rowCount,
+        options.draw_inner,
+        options.draw_outer,
+    );
 }
 
 export fn bufferDrawBox(
